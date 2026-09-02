@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: #0b0b10; color: #f7f7fb; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+::selection { background: #d8ff39; color: #0b0b10; }
+
+@layer components {
+  .glass { @apply border border-white/10 bg-white/[.045] backdrop-blur-xl; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-neon px-5 py-3 font-bold text-ink transition hover:-translate-y-0.5 hover:bg-[#e6ff76] active:translate-y-0; }
+  .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[.06] px-5 py-3 font-semibold text-white transition hover:border-white/25 hover:bg-white/10; }
+  .input-dark { @apply w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-white outline-none transition placeholder:text-white/35 focus:border-neon/70 focus:ring-2 focus:ring-neon/10; }
+  .eyebrow { @apply text-[11px] font-bold uppercase tracking-[.22em] text-neon; }
+  .section-title { @apply font-display text-2xl font-bold tracking-tight sm:text-3xl; }
+}
+
+.bg-grid { background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 34px 34px; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }

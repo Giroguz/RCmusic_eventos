@@ -8,20 +8,34 @@ export default function JoinEvent({ onJoin, onBack }) {
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
 
-  async function submit(event) {
-    event.preventDefault()
-    try {
-      const found = supabaseEnabled ? await getPublicEvent(query) : findEvent(query)
-      if (!found) {
-        setError('No encontramos ese evento. Revisa el código o prueba con el nombre exacto.')
-        return
+  sync function submit(event) {
+  event.preventDefault()
+  try {
+    let found = null
+
+    if (supabaseEnabled) {
+      try {
+        found = await getPublicEvent(query)
+      } catch {
+        const local = findEvent(query)
+        found = local ? { ...local, localOnly: true } : null
       }
-      setError('')
-      onJoin(found)
-    } catch {
-      setError('No se pudo conectar con el evento. Inténtalo otra vez en unos segundos.')
+    } else {
+      const local = findEvent(query)
+      found = local ? { ...local, localOnly: true } : null
     }
+
+    if (!found) {
+      setError('No encontramos ese evento. Revisa el código o prueba con el nombre exacto.')
+      return
+    }
+
+    setError('')
+    onJoin(found)
+  } catch {
+    setError('No se pudo conectar con el evento. Inténtalo otra vez en unos segundos.')
   }
+}
 
   return (
     <div className="min-h-screen bg-ink bg-grid">

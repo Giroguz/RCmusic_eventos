@@ -10,8 +10,41 @@ function Modal({ children, onClose, title }) {
 }
 
 function SearchResult({ track, onPreview, onRequest }) {
-  const sourceLabel ='YouTube'
-  return <div className="group flex gap-3 rounded-2xl border border-white/10 bg-white/[.035] p-3 transition hover:border-white/20 hover:bg-white/[.06]"><button onClick={() => onPreview(track)} className="relative h-20 w-28 shrink-0 overflow-hidden rounded-xl bg-white/10"><img src={track.thumbnail} alt="" className="h-full w-full object-cover opacity-80 transition group-hover:opacity-100" /><span className="absolute inset-0 grid place-items-center bg-black/25"><span className="grid h-9 w-9 place-items-center rounded-full bg-white text-ink"><Play size={15} fill="currentColor" /></span></span></button><div className="min-w-0 flex-1 py-0.5"><div className="flex items-center gap-2"><p className="truncate font-semibold">{track.title}</p><span className="shrink-0 rounded-md bg-white/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/45">{sourceLabel}</span></div><p className="mt-1 truncate text-xs text-white/50">{track.artist}</p><p className="mt-2 text-[11px] text-white/30">{track.duration}</p></div><button onClick={() => onRequest(track)} className="self-center rounded-xl bg-neon/10 px-3 py-2 text-xs font-bold text-neon transition hover:bg-neon hover:text-ink">Pedir</button></div>
+  const sourceLabel = 'YouTube'
+
+  return (
+    <div className="group grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-white/10 bg-white/[.035] p-3 transition hover:border-white/20 hover:bg-white/[.06]">
+      <button
+        onClick={() => onPreview(track)}
+        className="relative h-20 w-24 shrink-0 overflow-hidden rounded-xl bg-white/10"
+      >
+        <img src={track.thumbnail} alt="" className="h-full w-full object-cover opacity-80 transition group-hover:opacity-100" />
+        <span className="absolute inset-0 grid place-items-center bg-black/25">
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-white text-ink">
+            <Play size={15} fill="currentColor" />
+          </span>
+        </span>
+      </button>
+
+      <div className="min-w-0 py-0.5">
+        <div className="flex items-start gap-2">
+          <p className="break-words text-sm font-semibold leading-5">{track.title}</p>
+          <span className="shrink-0 rounded-md bg-white/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/45">
+            {sourceLabel}
+          </span>
+        </div>
+        <p className="mt-1 break-words text-xs leading-4 text-white/55">{track.artist}</p>
+        <p className="mt-2 text-[11px] text-white/30">{track.duration}</p>
+      </div>
+
+      <button
+        onClick={() => onRequest(track)}
+        className="self-center rounded-xl bg-neon/10 px-3 py-2 text-xs font-bold text-neon transition hover:bg-neon hover:text-ink"
+      >
+        Pedir
+      </button>
+    </div>
+  )
 }
 
 function RequestCard({ request, liked, onLike, onPreview }) {

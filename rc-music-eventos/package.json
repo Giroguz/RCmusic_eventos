@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node node_modules/esbuild/install.js && vite build",
+    "build": "echo VERCEL_BUILD_START && node --version && node node_modules/esbuild/install.js && echo ESBUILD_READY && node_modules/.bin/vite --version && node_modules/.bin/vite build",
     "preview": "vite preview"
   },
   "dependencies": {

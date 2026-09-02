@@ -24,8 +24,9 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .bg-grid { background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 34px 34px; }
 .party-page, .app-shell { position: relative; isolation: isolate; overflow: hidden; background-color: rgba(7,5,12,.9) !important; }
 .party-page::before, .app-shell::before { content: ''; position: absolute; inset: 0; z-index: -2; background: linear-gradient(115deg, rgba(5,3,10,.97) 8%, rgba(17,5,22,.82) 48%, rgba(8,3,13,.94)), url('/dj-console.gif') center/cover; opacity: .76; pointer-events: none; }
-.party-page::after, .app-shell::after { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(circle at 12% 12%, rgba(255,62,165,.17), transparent 31%), radial-gradient(circle at 88% 28%, rgba(168,85,247,.14), transparent 30%), linear-gradient(180deg, rgba(5,3,10,.08), rgba(5,3,10,.64)); pointer-events: none; }
+.party-page::after, .app-shell::after { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(circle at 12% 12%, rgba(255,62,165,.17), transparent 31%), radial-gradient(circle at 88% 28%, rgba(168,85,247,.14), transparent 30%), radial-gradient(circle at 52% 0%, rgba(45,226,230,.10), transparent 24%), linear-gradient(180deg, rgba(5,3,10,.08), rgba(5,3,10,.64)); pointer-events: none; }
 .party-page > *, .app-shell > * { position: relative; z-index: 1; }
+.app-shell main, .app-shell main > div { min-width: 0; max-width: 100%; overflow-x: hidden; }
 .party-page .glass, .app-shell .glass { border-color: rgba(255,255,255,.13); background-color: rgba(16,8,22,.55); }
 .home-visual { position: relative; overflow: hidden; border: 1px solid rgba(255,62,165,.24); background: #130717; box-shadow: 0 0 55px rgba(255,23,151,.1); }
 .home-visual::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,3,13,.95), rgba(8,3,13,.18) 65%, rgba(8,3,13,.72)); pointer-events: none; }

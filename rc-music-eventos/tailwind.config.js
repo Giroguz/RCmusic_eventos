@@ -8,6 +8,7 @@ export default {
         panel: '#15151e',
         neon: '#ff3ea5',
         violet: '#a855f7',
+        turquoise: '#2de2e6',
       },
       boxShadow: {
         glow: '0 0 35px rgba(255,62,165,.24)',

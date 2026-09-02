@@ -1,4 +1,6 @@
 import { Disc3, Radio } from 'lucide-react'
+import LanguagePicker from './LanguagePicker'
+import { useLanguage } from '../lib/i18n'
 
 export function Brand({ compact = false }) {
   return (
@@ -15,12 +17,13 @@ export function Brand({ compact = false }) {
 }
 
 export function AppShell({ children, onHome, right }) {
+  const { t } = useLanguage()
   return (
     <div className="min-h-screen overflow-x-hidden bg-ink bg-grid">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-ink/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <button onClick={onHome} aria-label="Ir al inicio"><Brand compact /></button>
-          {right}
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
+          <button onClick={onHome} aria-label={t('home')}><Brand compact /></button>
+          <div className="flex items-center gap-2"><LanguagePicker compact />{right}</div>
         </div>
       </header>
       <main>{children}</main>

@@ -19,7 +19,7 @@ export default function App() {
 
   async function updateEvent(nextEvent) {
     const previous = activeEvent
-    if (supabaseEnabled && previous) {
+    if (supabaseEnabled && previous && !previous.localOnly) {
       const previousById = Object.fromEntries((previous.requests || []).map((request) => [request.id, request]))
       for (const request of nextEvent.requests || []) {
         const oldRequest = previousById[request.id]

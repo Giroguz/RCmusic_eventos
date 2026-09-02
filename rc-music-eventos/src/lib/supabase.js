@@ -83,6 +83,13 @@ export async function createDjEvent(input, token = getStoredDjSession()?.token) 
   return mapEvent(Array.isArray(data) ? data[0] : data, [])
 }
 
+export async function updateDjEventInfo(eventId, input, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) throw new Error('DJ session required')
+  const { data, error } = await supabase.rpc('dj_update_event_info', { p_token: token, p_event_id: eventId, p_dj_name: input.djName, p_yape_number: input.yapeNumber, p_contact: input.contact })
+  if (error) throw error
+  return mapEvent(Array.isArray(data) ? data[0] : data, [])
+}
+
 export async function addSongRequest(eventId, song, form) {
   const { data, error } = await supabase.from('song_requests').insert({ event_id: eventId, video_id: song.source === 'spotify' ? `spotify:${song.id}` : song.id, title: song.title, artist: song.artist, thumbnail: song.thumbnail, requester: form.requester, dedication: form.dedication || null }).select().single()
   if (error) throw error

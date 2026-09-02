@@ -73,7 +73,7 @@ export default function DjApp({ onExit, session }) {
     const updated = { ...activeEvent, djName: profileForm.djName.trim() || 'DJ', yapeNumber: profileForm.yapeNumber.trim(), contact: profileForm.contact.trim() }
     try {
       const saved = supabaseEnabled ? await updateDjEventInfo(activeEvent.id, updated, session?.token) : updated
-      setEvents((current) => current.map((event) => event.id === activeEvent.id ? { ...event, ...saved } : event))
+      setEvents((current) => current.map((event) => event.id === activeEvent.id ? { ...event, djName: saved.djName, yapeNumber: saved.yapeNumber, contact: saved.contact } : event))
       if (!supabaseEnabled) saveEvents(events.map((event) => event.id === activeEvent.id ? updated : event))
       setShowSettings(false); setNotice(t('profileSaved')); setTimeout(() => setNotice(''), 4000)
     } catch { setNotice(t('profileSaveFailed')) }

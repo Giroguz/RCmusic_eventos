@@ -80,12 +80,7 @@ export async function searchTracks(query) {
   const normalized = query.trim()
   if (!normalized) return []
 
-  const [youtubeResult, spotifyResult] = await Promise.allSettled([
-    searchYoutube(normalized),
-    searchSpotify(normalized),
-  ])
-  const youtube = youtubeResult.status === 'fulfilled' ? youtubeResult.value : []
-  const spotify = spotifyResult.status === 'fulfilled' ? spotifyResult.value : []
-  if (!youtube.length && !spotify.length) throw new Error('No se encontraron resultados')
-  return [...youtube, ...spotify]
+  const youtube = await searchYoutube(normalized)
+  if (!youtube.length) throw new Error('No se encontraron resultados')
+  return youtube
 }

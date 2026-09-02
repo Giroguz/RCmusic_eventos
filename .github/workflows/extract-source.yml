@@ -1,0 +1,38 @@
+name: Extract RC Music source
+
+on:
+  push:
+    paths:
+      - '.github/workflows/extract-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract source package
+        run: |
+          rm -rf /tmp/rc-release
+          mkdir -p /tmp/rc-release
+          tar -xzf RC_music_eventos_release.tar.gz -C /tmp/rc-release
+          cp -R /tmp/rc-release/rc-music-eventos/src rc-music-eventos/
+          cp -R /tmp/rc-release/rc-music-eventos/supabase rc-music-eventos/
+          cp -R /tmp/rc-release/rc-download-server/. rc-download-server/
+
+      - name: Commit extracted source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add rc-music-eventos/src rc-music-eventos/supabase rc-download-server
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit'
+          else
+            git commit -m 'Extract complete RC Music source'
+            git push
+          fi

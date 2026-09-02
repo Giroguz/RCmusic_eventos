@@ -97,7 +97,8 @@ export default function AttendeeApp({ event, onUpdate, onExit }) {
         ? await addSongRequest(event.id, requestSong, form)
         : { id: `request-${Date.now()}`, title: requestSong.title, artist: requestSong.artist, videoId: requestSong.source === 'spotify' ? `spotify:${requestSong.id}` : requestSong.id, source: requestSong.source || 'youtube', thumbnail: requestSong.thumbnail, requester: form.requester.trim(), dedication: form.dedication.trim(), likes: 0, status: 'pending' }
       onUpdate({ ...event, requests: [...(event.requests || []), request] })
-      setRequestSong(null); setForm({ requester: '', dedication: '' }); setNotice('¡Pedido enviado! La pista ya puede votarlo.')
+      setRequestSong(null); setForm({ requester: '', dedication: '' }); setResults([]); setNotice('¡Pedido enviado! La pista ya puede votarlo.')
+
       setTimeout(() => setNotice(''), 3500)
     } catch {
       setNotice('No se pudo enviar el pedido. Inténtalo otra vez.')

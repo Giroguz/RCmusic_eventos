@@ -9,7 +9,7 @@ export default function JoinEvent({ onJoin, onBack }) {
   const [error, setError] = useState('')
 
   async function submit(event) {
-    event.preventDefault()if (supabaseEnabled && !event.localOnly) await likeSongRequest(id)
+    event.preventDefault()
   try {
     let found = null
 

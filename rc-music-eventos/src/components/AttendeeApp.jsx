@@ -60,7 +60,7 @@ export default function AttendeeApp({ event, onUpdate, onExit }) {
     e.preventDefault()
     if (!form.requester.trim() || !requestSong) return
     try {
-      const request = supabaseEnabled
+      const request = supabaseEnabled && !event.localOnly
         ? await addSongRequest(event.id, requestSong, form)
         : { id: `request-${Date.now()}`, title: requestSong.title, artist: requestSong.artist, videoId: requestSong.source === 'spotify' ? `spotify:${requestSong.id}` : requestSong.id, source: requestSong.source || 'youtube', thumbnail: requestSong.thumbnail, requester: form.requester.trim(), dedication: form.dedication.trim(), likes: 0, status: 'pending' }
       onUpdate({ ...event, requests: [...(event.requests || []), request] })
@@ -74,7 +74,7 @@ export default function AttendeeApp({ event, onUpdate, onExit }) {
   async function likeRequest(id) {
     if (likedIds.includes(id)) return
     try {
-      if (supabaseEnabled) await likeSongRequest(id)
+      if (supabaseEnabled && !event.localOnly) await likeSongRequest(id)
       const nextLiked = [...likedIds, id]
       const requests = event.requests.map((request) => request.id === id ? { ...request, likes: request.likes + 1 } : request)
       setLikedIds(nextLiked); saveLikedIds(event.id, nextLiked); onUpdate({ ...event, requests })

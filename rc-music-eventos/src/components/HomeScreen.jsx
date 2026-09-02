@@ -31,7 +31,7 @@ export default function HomeScreen({ onAttendee, onDj }) {
             <p className="mt-6 max-w-xl text-base leading-7 text-white/55 sm:text-lg">Pide canciones, vota por tus favoritas y conecta con el DJ en tiempo real. Sin interrumpir la fiesta.</p>
           </div>
           <div className="mt-12 grid gap-5 md:grid-cols-2">
-            <RoleCard icon={Users} title="Entrar como Asistente" copy="Únete con el código del evento y haz que tu canción llegue a la cabina." action="Pedir una canción" accent="lime" features={['Buscar en YouTube y Spotify', 'Votar pedidos', 'Dedicar canciones']} onClick={onAttendee} />
+            <RoleCard icon={Users} title="Entrar como Asistente" copy="Únete con el código del evento y haz que tu canción llegue a la cabina." action="Pedir una canción" accent="lime" features={['Buscar en YouTube', 'Votar pedidos', 'Dedicar canciones']} onClick={onAttendee} />
             <RoleCard icon={Headphones} title="Panel de DJ" copy="Administra tu evento, ordena la cola y mantén la pista encendida." action="Abrir panel de control" accent="violet" features={['Cola en vivo', 'Control de reproducción', 'Crear eventos']} onClick={onDj} />
           </div>
           <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-white/40"><span className="flex items-center gap-2"><Heart size={14} className="text-neon" /> Likes que ordenan la cola</span><span className="flex items-center gap-2"><Mic2 size={14} className="text-violet-300" /> Dedicatorias para el momento</span><span className="flex items-center gap-2"><PartyPopper size={14} className="text-amber-300" /> Hecho para fiestas</span></div>

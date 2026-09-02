@@ -80,6 +80,8 @@ export async function searchTracks(query) {
   const normalized = query.trim()
   if (!normalized) return []
 
+  // Spotify queda como integración opcional; mientras no haya credenciales,
+  // la experiencia principal funciona únicamente con resultados de YouTube.
   const youtube = await searchYoutube(normalized)
   if (!youtube.length) throw new Error('No se encontraron resultados')
   return youtube

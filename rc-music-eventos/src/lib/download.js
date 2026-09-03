@@ -8,7 +8,14 @@ export async function downloadYoutubeAudio(videoId, format = 'mp3', fileName = '
     : { query: String(searchQuery || '').trim(), format }
   if (!body.videoId && !body.query) throw new Error('INVALID_DOWNLOAD_SOURCE')
   const response = await fetch(`${apiBase}/youtube-download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'DOWNLOAD_FAILED')
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null))?.error
+    if (response.status === 401 && error === 'DRIVE_AUTH_REQUIRED') {
+      window.location.href = `${apiBase}/drive/auth?returnTo=${encodeURIComponent(window.location.href)}`
+      return
+    }
+    throw new Error(error || 'DOWNLOAD_FAILED')
+  }
   const blob = await response.blob()
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')

@@ -74,7 +74,7 @@ app.post('/api/youtube-download', async (req, res) => {
   // Accept only a YouTube video id; never pass arbitrary URLs to the downloader.
   if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return res.status(400).json({ error: 'ID de YouTube inválido' })
 
-  const executable = process.env.YTDLP_PATH || 'yt-dlp'
+  const executable = process.env.YTDLP_PATH || path.join(process.cwd(), 'bin', 'yt-dlp')
   const source = `https://www.youtube.com/watch?v=${videoId}`
   const directory = await mkdtemp(path.join(os.tmpdir(), 'rc-youtube-'))
   const outputBase = path.join(directory, 'audio')

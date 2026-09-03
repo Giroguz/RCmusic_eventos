@@ -110,7 +110,7 @@ export default function DjApp({ onExit, session }) {
     try {
       if (supabaseEnabled && previous) {
         const changed = nextEvent.requests.find((request) => previous.requests.find((oldRequest) => oldRequest.id === request.id && oldRequest.status !== request.status))
-        if (changed) await setRequestStatus(changed.id, changed.status, session?.token)
+        if (changed) await setRequestStatus(changed.id, changed.status, access?.token)
       } else {
         saveEvents(next)
       }

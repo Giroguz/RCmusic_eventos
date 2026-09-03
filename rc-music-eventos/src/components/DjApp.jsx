@@ -131,16 +131,16 @@ export default function DjApp({ onExit, session }) {
     const playedRequests = (activeEvent.requests || []).filter((request) => request.status === 'played').sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')))
     const entries = playedRequests.map((request, index) => [
       `${index + 1}.-Canción: ${request.title}`,
-      `      Artista: ${request.artist}`,
+      `Artista: ${request.artist}`,
     ].join(lineBreak))
     const content = [
       `Canciones tocadas — ${activeEvent.name}`,
-      '',
       `Código del evento: ${activeEvent.code}`,
-      '',
       '---------------------------------------------------',
       '',
       entries.join(`${lineBreak}${lineBreak}`),
+      '',
+      '---------------------------------------------------',
     ].join(lineBreak)
     const blob = new Blob([`\ufeff${content}`], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)

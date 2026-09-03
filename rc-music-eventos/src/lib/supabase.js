@@ -60,10 +60,10 @@ export async function signOutDj(token = getStoredDjSession()?.token) {
 }
 
 function mapRequest(row) {
-  const rawVideoId = String(row.video_id || ''); const source = rawVideoId.match(/^(spotify|deezer|soundcloud):/)?.[1] || 'youtube'; const videoId = rawVideoId.replace(/^(spotify|deezer|soundcloud):/, ''); const externalUrl = source === 'deezer' ? `https://www.deezer.com/track/${videoId}` : source === 'soundcloud' ? `https://soundcloud.com/search/sounds?q=${encodeURIComponent(`${row.title} ${row.artist}`)}` : ''; return { id: row.id, title: row.title, artist: row.artist, videoId, source, spotifyId: videoId, externalUrl, thumbnail: row.thumbnail, requester: row.requester, dedication: row.dedication || '', likes: row.likes || 0, status: row.status, createdAt: row.created_at }
+  const rawVideoId = String(row.video_id || ''); const source = rawVideoId.match(/^(spotify|deezer|soundcloud):/)?.[1] || 'youtube'; const videoId = rawVideoId.replace(/^(spotify|deezer|soundcloud):/, ''); const externalUrl = source === 'deezer' ? `https://www.deezer.com/track/${videoId}` : source === 'soundcloud' ? `https://soundcloud.com/search/sounds?q=${encodeURIComponent(`${row.title} ${row.artist}`)}` : ''; return { id: row.id, title: row.title, artist: row.artist, videoId, source, spotifyId: videoId, externalUrl, thumbnail: row.thumbnail, requester: row.requester, dedication: row.dedication || '', paymentProof: row.payment_proof || '', likes: row.likes || 0, status: row.status, createdAt: row.created_at }
 }
 export function mapEvent(row, requests = []) {
-  return { id: row.id, code: row.code, name: row.name, djName: row.dj_name, contact: row.contact || '', yapeNumber: row.yape_number || '', thankYou: row.thank_you || '', qrImage: row.qr_image_url || '', createdAt: row.created_at, requests: requests.map(mapRequest) }
+  return { id: row.id, code: row.code, name: row.name, djName: row.dj_name, contact: row.contact || '', yapeNumber: row.yape_number || '', thankYou: row.thank_you || '', qrImage: row.qr_image_url || '', tipsRequired: Boolean(row.tips_required), createdAt: row.created_at, requests: requests.map(mapRequest) }
 }
 
 export async function getPublicEvent(query) {
@@ -73,7 +73,7 @@ export async function getPublicEvent(query) {
   const { data: event, error } = await supabase.from('events').select('*').eq('code', normalized).maybeSingle()
   if (error) throw error
   if (!event) return null
-  const { data: requests, error: requestsError } = await supabase.from('song_requests').select('*').eq('event_id', event.id).order('likes', { ascending: false })
+  const { data: requests, error: requestsError } = await supabase.from('song_requests').select('id,video_id,title,artist,thumbnail,requester,dedication,likes,status,created_at').eq('event_id', event.id).order('likes', { ascending: false })
   if (requestsError) throw requestsError
   return mapEvent(event, requests || [])
 }
@@ -106,6 +106,13 @@ export async function updateDjEventQr(eventId, qrImage, token = getStoredDjSessi
   return data
 }
 
+export async function updateDjEventTipSettings(eventId, tipsRequired, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) throw new Error('DJ session required')
+  const { data, error } = await supabase.rpc('dj_update_event_tip_settings', { p_token: token, p_event_id: eventId, p_tips_required: Boolean(tipsRequired) })
+  if (error) throw error
+  return Boolean(data)
+}
+
 export async function getDjEventQr(eventId, token = getStoredDjSession()?.token) {
   if (!supabase || !token) return ''
   const { data, error } = await supabase.rpc('dj_get_event_qr', { p_token: token, p_event_id: eventId })
@@ -114,9 +121,9 @@ export async function getDjEventQr(eventId, token = getStoredDjSession()?.token)
 }
 
 export async function addSongRequest(eventId, song, form) {
-  const { data, error } = await supabase.from('song_requests').insert({ event_id: eventId, video_id: song.source === 'youtube' ? song.id : `${song.source}:${song.id}`, title: song.title, artist: song.artist, thumbnail: song.thumbnail, requester: form.requester, dedication: form.dedication || null }).select().single()
+  const { data, error } = await supabase.rpc('submit_song_request', { p_event_id: eventId, p_video_id: song.source === 'youtube' ? song.id : `${song.source}:${song.id}`, p_title: song.title, p_artist: song.artist, p_thumbnail: song.thumbnail, p_requester: form.requester || 'Anónimo', p_dedication: form.dedication || null, p_payment_proof: form.paymentProof || null })
   if (error) throw error
-  return mapRequest(data)
+  return mapRequest(Array.isArray(data) ? data[0] : data)
 }
 export async function likeSongRequest(requestId) { const { error } = await supabase.rpc('like_request', { request_uuid: requestId }); if (error) throw error }
 export async function setRequestStatus(requestId, status, token = getStoredDjSession()?.token) {

@@ -1,4 +1,4 @@
-import { Radio } from 'lucide-react'
+import { ArrowLeft, Radio } from 'lucide-react'
 import rcMusicLogo from '../assets/1788413537933-832c4ec7.jpg'
 import { useLanguage } from '../lib/i18n'
 import LanguagePicker from './LanguagePicker'
@@ -24,8 +24,11 @@ export function AppShell({ children, onHome, right }) {
     <div className="app-shell min-h-screen overflow-x-hidden bg-ink bg-grid">
       <header className="sticky top-0 z-30 border-b border-neon/10 bg-[#08050d]/75 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
-          <button onClick={onHome} aria-label={t('home')}><Brand compact /></button>
-          <div className="flex items-center gap-2"><LanguagePicker compact />{right}</div>
+          <div className="flex min-w-0 items-center gap-2">
+            <button onClick={onHome} aria-label={t('home')} className="shrink-0"><Brand compact /></button>
+            <button onClick={onHome} className="btn-secondary shrink-0 justify-center px-3 py-2 text-sm" aria-label={t('back')}><ArrowLeft size={16} /><span>{t('back')}</span></button>
+          </div>
+          <div className="flex shrink-0 items-center gap-2"><LanguagePicker compact />{right}</div>
         </div>
       </header>
       <main>{children}</main>

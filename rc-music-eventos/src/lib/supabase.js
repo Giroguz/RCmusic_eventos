@@ -119,7 +119,14 @@ export async function addSongRequest(eventId, song, form) {
   return mapRequest(data)
 }
 export async function likeSongRequest(requestId) { const { error } = await supabase.rpc('like_request', { request_uuid: requestId }); if (error) throw error }
-export async function setRequestStatus(requestId, status, token = getStoredDjSession()?.token) { const { error } = await supabase.rpc('dj_set_request_status', { p_token: token, p_request_id: requestId, p_status: status }); if (error) throw error }
+export async function setRequestStatus(requestId, status, token = getStoredDjSession()?.token) {
+  if (status === 'not-found' || status === 'pending') {
+    const { error } = await supabase.rpc('dj_set_request_not_found', { p_token: token, p_request_id: requestId, p_not_found: status === 'not-found' })
+    if (!error) return
+  }
+  const { error } = await supabase.rpc('dj_set_request_status', { p_token: token, p_request_id: requestId, p_status: status })
+  if (error) throw error
+}
 
 function account(row) { return { id: row.id, email: row.email, displayName: row.display_name, role: row.role, approved: row.approved, blocked: row.blocked, planType: row.plan_type, planStartedAt: row.plan_started_at, planExpiresAt: row.plan_expires_at, daysUsed: row.days_used, daysRemaining: row.days_remaining, isActive: row.is_active, generatedCode: row.generated_code } }
 export async function adminListDjs(token) { const { data, error } = await supabase.rpc('admin_list_djs', { p_token: token }); if (error) throw error; return (data || []).map(account) }

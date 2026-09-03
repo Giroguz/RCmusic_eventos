@@ -1,13 +1,12 @@
-import { Disc3, Radio } from 'lucide-react'
-import LanguagePicker from './LanguagePicker'
+import { Radio } from 'lucide-react'
 import { useLanguage } from '../lib/i18n'
 
 export function Brand({ compact = false }) {
   const { t } = useLanguage()
   return (
     <div className="flex items-center gap-3">
-      <div className="neon-orb grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#ff8bc9] via-neon to-[#a855f7] text-ink shadow-glow">
-        <Disc3 size={22} strokeWidth={2.5} />
+      <div className="neon-orb h-10 w-10 shrink-0 overflow-hidden rounded-2xl bg-black/30 shadow-glow">
+        <img src="/rc-music-logo.jpg" alt="R&C music" className="h-full w-full object-cover" />
       </div>
       <div className={compact ? 'hidden sm:block' : ''}>
         <p className="font-display text-lg font-bold leading-none tracking-tight">RC music<span className="text-neon">_eventos</span></p>

@@ -1,4 +1,5 @@
 import { Radio } from 'lucide-react'
+import rcMusicLogo from '../assets/rc-music-logo.jpg'
 import { useLanguage } from '../lib/i18n'
 
 export function Brand({ compact = false }) {
@@ -6,7 +7,7 @@ export function Brand({ compact = false }) {
   return (
     <div className="flex items-center gap-3">
       <div className="neon-orb grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-neon/30 bg-white p-1 shadow-glow">
-        <img src="/rc-music-logo.jpg" alt="R&C music" className="h-full w-full rounded-xl object-contain" />
+        <img src={rcMusicLogo} alt="R&C music" className="h-full w-full rounded-xl object-contain" />
       </div>
       <div className={compact ? 'hidden sm:block' : ''}>
         <p className="font-display text-lg font-bold leading-none tracking-tight">RC music<span className="text-neon">_eventos</span></p>

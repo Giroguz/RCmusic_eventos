@@ -27,6 +27,13 @@ export function withMedia(track) {
   return { ...track, source: 'youtube', thumbnail: track.thumbnail || `https://img.youtube.com/vi/${track.id}/hqdefault.jpg`, videoUrl: track.videoUrl || `https://www.youtube-nocookie.com/embed/${track.id}?autoplay=1&rel=0` }
 }
 
+function decodeHtml(value = '') {
+  if (typeof document === 'undefined') return value
+  const element = document.createElement('textarea')
+  element.innerHTML = value
+  return element.value
+}
+
 async function searchYoutube(query) {
   const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY
   if (!apiKey) {
@@ -39,7 +46,7 @@ async function searchYoutube(query) {
   const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`)
   if (!response.ok) throw new Error('No se pudo consultar YouTube')
   const data = await response.json()
-  return (data.items || []).filter((item) => item.id?.videoId).map((item) => withMedia({ id: item.id.videoId, title: item.snippet.title, artist: item.snippet.channelTitle, duration: 'YouTube', source: 'youtube' }))
+  return (data.items || []).filter((item) => item.id?.videoId).map((item) => withMedia({ id: item.id.videoId, title: decodeHtml(item.snippet.title), artist: decodeHtml(item.snippet.channelTitle), duration: 'YouTube', source: 'youtube' }))
 }
 
 async function searchDeezer(query) {

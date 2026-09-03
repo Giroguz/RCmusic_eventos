@@ -63,7 +63,7 @@ function mapRequest(row) {
   const rawVideoId = String(row.video_id || ''); const source = rawVideoId.match(/^(spotify|deezer|soundcloud):/)?.[1] || 'youtube'; const videoId = rawVideoId.replace(/^(spotify|deezer|soundcloud):/, ''); const externalUrl = source === 'deezer' ? `https://www.deezer.com/track/${videoId}` : source === 'soundcloud' ? `https://soundcloud.com/search/sounds?q=${encodeURIComponent(`${row.title} ${row.artist}`)}` : ''; return { id: row.id, title: row.title, artist: row.artist, videoId, source, spotifyId: videoId, externalUrl, thumbnail: row.thumbnail, requester: row.requester, dedication: row.dedication || '', paymentProof: row.payment_proof || '', likes: row.likes || 0, status: row.status, createdAt: row.created_at }
 }
 export function mapEvent(row, requests = []) {
-  return { id: row.id, code: row.code, name: row.name, djName: row.dj_name, contact: row.contact || '', yapeNumber: row.yape_number || '', thankYou: row.thank_you || '', qrImage: row.qr_image_url || '', tipsRequired: Boolean(row.tips_required), createdAt: row.created_at, requests: requests.map(mapRequest) }
+  return { id: row.id, code: row.code, name: row.name, djName: row.dj_name, contact: row.contact || '', yapeNumber: row.yape_number || '', thankYou: row.thank_you || '', qrImage: row.qr_image_url || '', tipsRequired: Boolean(row.tips_required), finalized: Boolean(row.finalized_at || row.finalized), finalizedAt: row.finalized_at || null, createdAt: row.created_at, requests: requests.map(mapRequest) }
 }
 
 export async function getPublicEvent(query) {
@@ -118,6 +118,13 @@ export async function getDjEventQr(eventId, token = getStoredDjSession()?.token)
   const { data, error } = await supabase.rpc('dj_get_event_qr', { p_token: token, p_event_id: eventId })
   if (error) throw error
   return data || ''
+}
+
+export async function finalizeDjEvent(eventId, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) throw new Error('DJ session required')
+  const { data, error } = await supabase.rpc('dj_finalize_event', { p_token: token, p_event_id: eventId })
+  if (error) throw error
+  return data
 }
 
 export async function addSongRequest(eventId, song, form) {

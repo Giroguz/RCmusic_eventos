@@ -9,11 +9,11 @@ import { supabaseEnabled, ensureAnonymousSession, setRequestStatus, getStoredDjS
 
 
 class ScreenErrorBoundary extends Component {
-  state = { hasError: false }
-  static getDerivedStateFromError() { return { hasError: true } }
+  state = { hasError: false, error: null }
+  static getDerivedStateFromError(error) { return { hasError: true, error } }
   componentDidCatch(error) { console.error('RC music screen error', error) }
   render() {
-    if (this.state.hasError) return <div className="grid min-h-screen place-items-center bg-ink px-6 text-center text-white"><div><p className="font-display text-2xl font-bold">No se pudo cargar esta pantalla</p><p className="mt-2 text-sm text-white/50">Recarga la página para volver a intentarlo.</p><button onClick={() => window.location.reload()} className="btn-primary mt-5">Recargar</button></div></div>
+    if (this.state.hasError) return <div className="grid min-h-screen place-items-center bg-ink px-6 text-center text-white"><div><p className="font-display text-2xl font-bold">No se pudo cargar esta pantalla</p><p className="mt-2 text-sm text-white/50">Recarga la página para volver a intentarlo.</p>{this.state.error?.message && <p className="mt-3 text-xs text-red-300">{this.state.error.message}</p>}<button onClick={() => window.location.reload()} className="btn-primary mt-5">Recargar</button></div></div>
     return this.props.children
   }
 }

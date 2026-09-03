@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Permanent+Marker&family=Space+Grotesk:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -45,11 +45,11 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 @media (prefers-reduced-motion: reduce) { .party-banner__surface::before, .party-banner__light, .party-banner__equalizer span { animation: none; } }
 .search-result__title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .neon-orb { box-shadow: 0 0 45px rgba(255,62,165,.4), inset 0 0 24px rgba(255,255,255,.18); }
-.brand-wordmark { display: flex; align-items: baseline; white-space: nowrap; font-family: 'Permanent Marker', cursive; font-size: clamp(1.35rem, 5vw, 2.25rem); line-height: .95; letter-spacing: -.045em; filter: drop-shadow(0 0 7px rgba(255,230,0,.42)); }
+.brand-wordmark { display: flex; align-items: baseline; white-space: nowrap; font-family: 'Caveat', cursive; font-size: clamp(1.45rem, 5vw, 2.35rem); font-weight: 600; line-height: .9; letter-spacing: -.02em; filter: drop-shadow(0 0 6px rgba(255,62,165,.32)); }
 .brand-wordmark span { display: inline-block; }
-.brand-wordmark__rc { color: #ffe600; text-shadow: 0 0 5px rgba(255,230,0,.9), 0 0 16px rgba(255,174,0,.7); }
-.brand-wordmark__music { color: #ff3ea5; text-shadow: 0 0 5px rgba(255,62,165,.95), 0 0 16px rgba(255,62,165,.72); }
-.brand-wordmark__events { color: #2de2e6; text-shadow: 0 0 5px rgba(45,226,230,.95), 0 0 16px rgba(45,226,230,.7); }
+.brand-wordmark__rc { color: #ffe600; text-shadow: 0 0 4px rgba(255,230,0,.8), 0 0 12px rgba(255,174,0,.55); }
+.brand-wordmark__music { color: #ff3ea5; text-shadow: 0 0 4px rgba(255,62,165,.85), 0 0 12px rgba(255,62,165,.58); }
+.brand-wordmark__events { color: #ff3ea5; text-shadow: 0 0 4px rgba(255,62,165,.85), 0 0 12px rgba(255,62,165,.58); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 @media (prefers-reduced-motion: reduce) { .party-page::before, .app-shell::before { background-image: linear-gradient(115deg, rgba(5,3,10,.97), rgba(17,5,22,.88)), url('/dj-console.gif'); } }

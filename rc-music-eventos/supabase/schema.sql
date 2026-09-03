@@ -181,3 +181,14 @@ create or replace function public.cleanup_expired_demo_codes() returns integer l
 revoke all on function public.cleanup_expired_demo_codes() from public,anon,authenticated;
 create or replace function public.dj_start_trial(p_email text,p_display_name text) returns table(email text,display_name text,generated_code text,plan_expires_at timestamptz) language plpgsql security definer set search_path=public as $$ declare raw_code text; normalized_email text; existing public.dj_accounts%rowtype; new_id uuid; begin normalized_email:=lower(trim(p_email)); if normalized_email='' or position('@' in normalized_email)<2 then raise exception 'Valid email required'; end if; select a.* into existing from public.dj_accounts a where a.email=normalized_email limit 1; if existing.id is not null then if existing.plan_type='trial' and existing.demo_code is not null and existing.plan_expires_at>now() then return query select existing.email,existing.display_name,existing.demo_code,existing.plan_expires_at; return; end if; raise exception 'Demo already used or email already registered'; end if; raw_code:=upper(substr(encode(gen_random_bytes(8),'hex'),1,10)); insert into public.dj_accounts(email,display_name,access_code_hash,demo_code,demo_used_at,approved,blocked,plan_type,plan_started_at,plan_expires_at) values(normalized_email,coalesce(nullif(trim(p_display_name),''),'DJ Demo'),encode(digest(raw_code,'sha256'),'hex'),raw_code,now(),true,false,'trial',now(),now()+interval '1 day') returning id into new_id; return query select a.email,a.display_name,a.demo_code,a.plan_expires_at from public.dj_accounts a where a.id=new_id; end $$;
 grant execute on function public.dj_start_trial(text,text) to anon,authenticated;
+do $do$
+begin
+  if exists (select 1 from pg_available_extensions where name='pg_cron') then
+    create extension if not exists pg_cron;
+    if not exists (select 1 from cron.job where jobname='rc-cleanup-expired-demo-codes') then
+      perform cron.schedule('rc-cleanup-expired-demo-codes','0 * * * *',$job$select public.cleanup_expired_demo_codes();$job$);
+    end if;
+  end if;
+exception when others then
+  raise notice 'Enable an external hourly schedule for cleanup_expired_demo_codes if pg_cron is unavailable';
+end $do$;

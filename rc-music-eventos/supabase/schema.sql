@@ -49,6 +49,7 @@ create table if not exists public.events (
   thank_you text,
   created_at timestamptz not null default now()
 );
+alter table public.events add column if not exists qr_image_url text;
 create table if not exists public.song_requests (
   id uuid primary key default gen_random_uuid(),
   event_id uuid not null references public.events(id) on delete cascade,
@@ -192,3 +193,31 @@ begin
 exception when others then
   raise notice 'Enable an external hourly schedule for cleanup_expired_demo_codes if pg_cron is unavailable';
 end $do$;
+-- Public payment QR image for Yape, Plin or any bank.
+alter table public.events add column if not exists qr_image_url text;
+
+create or replace function public.dj_update_event_qr(p_token text, p_event_id uuid, p_qr_image text)
+returns text
+language plpgsql security definer set search_path = public as $$
+declare d public.dj_accounts; saved text;
+begin
+  select * into d from public._dj_access(p_token);
+  if d.id is null then raise exception 'DJ access denied'; end if;
+  update public.events
+    set qr_image_url = nullif(left(trim(coalesce(p_qr_image, '')), 1200000), '')
+    where id = p_event_id and owner_id = d.id
+    returning qr_image_url into saved;
+  if not found then raise exception 'Event not found'; end if;
+  return coalesce(saved, '');
+end $$;
+grant execute on function public.dj_update_event_qr(text, uuid, text) to anon, authenticated;
+
+create or replace function public.dj_get_event_qr(p_token text, p_event_id uuid)
+returns text
+language sql security definer set search_path = public as $$
+  select coalesce(e.qr_image_url, '')
+  from public.events e join public._dj_access(p_token) d on d.id = e.owner_id
+  where e.id = p_event_id
+  limit 1
+$$;
+grant execute on function public.dj_get_event_qr(text, uuid) to anon, authenticated;

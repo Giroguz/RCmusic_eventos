@@ -1,3 +1,7 @@
+-- Allow the unavailable-song state in the database constraint.
+alter table public.song_requests drop constraint if exists song_requests_status_check;
+alter table public.song_requests add constraint song_requests_status_check check (status::text in ('pending', 'played', 'not-found'));
+
 -- Separate status RPC for the unavailable-song toggle.
 -- This keeps the boolean action independent from text enum casting at the client boundary.
 create or replace function public.dj_set_request_not_found(p_token text, p_request_id uuid, p_not_found boolean)

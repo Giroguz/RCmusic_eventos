@@ -127,20 +127,23 @@ export default function DjApp({ onExit, session }) {
 
   function downloadPlayedSongs() {
     if (!activeEvent) return
+    const lineBreak = '\r\n'
     const playedRequests = (activeEvent.requests || []).filter((request) => request.status === 'played').sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')))
-    const lines = [
+    const entries = playedRequests.map((request, index) => [
+      `PEDIDO ${index + 1}`,
+      `Canción: ${request.title}`,
+      `Artista: ${request.artist}`,
+      `Pedido por: ${request.requester || '—'}`,
+      `Dedicado: ${request.dedication || '—'}`,
+    ].join(lineBreak))
+    const content = [
       `Canciones tocadas — ${activeEvent.name}`,
       `Código del evento: ${activeEvent.code}`,
-      `Total: ${playedRequests.length}`,
+      `Total de pedidos: ${playedRequests.length}`,
       '',
-      ...playedRequests.map((request, index) => [
-        `${index + 1}. ${request.title}`,
-        `   Artista: ${request.artist}`,
-        `   Pedido por: ${request.requester || '—'}`,
-        `   Dedicado: ${request.dedication || '—'}`,
-      ].join('\\n')),
-    ]
-    const blob = new Blob([lines.join('\\n')], { type: 'text/plain;charset=utf-8' })
+      ...entries,
+    ].join(`${lineBreak}${lineBreak}`)
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url

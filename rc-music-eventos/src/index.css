@@ -35,8 +35,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .party-banner__light { position: absolute; z-index: 1; width: 35%; height: 170%; top: -35%; filter: blur(22px); opacity: .42; transform: rotate(25deg); animation: party-banner-sweep 6s ease-in-out infinite alternate; }
 .party-banner__light--pink { left: 24%; background: linear-gradient(90deg, transparent, rgba(255,62,165,.55), transparent); }
 .party-banner__light--turquoise { right: 18%; background: linear-gradient(90deg, transparent, rgba(45,226,230,.35), transparent); animation-delay: -2.5s; }
-.party-banner__equalizer { position: absolute; z-index: 1; right: 6%; bottom: 12%; display: flex; align-items: end; gap: 4px; height: 42%; opacity: .55; }
-.party-banner__equalizer span { display: block; width: 4px; height: 35%; border-radius: 999px; background: linear-gradient(#2de2e6, #ff3ea5); animation: party-banner-bars 900ms ease-in-out infinite alternate; animation-delay: var(--bar-delay); }
+.party-banner__equalizer { position: absolute; z-index: 3; left: 50%; right: auto; bottom: 50%; display: flex; align-items: end; gap: 5px; height: 62%; opacity: .95; transform: translate(-50%, 50%); filter: drop-shadow(0 0 10px rgba(255,62,165,.8)); }
+.party-banner__equalizer span { display: block; width: 5px; height: 35%; border-radius: 999px; background: #ff3ea5; box-shadow: 0 0 8px rgba(255,62,165,.95), 0 0 18px rgba(255,62,165,.55); animation: party-banner-bars 900ms ease-in-out infinite alternate; animation-delay: var(--bar-delay); }
 .party-banner__equalizer span:nth-child(3n) { height: 76%; }
 .party-banner__equalizer span:nth-child(4n) { height: 52%; }
 @keyframes party-banner-spin { to { transform: rotate(360deg); } }

@@ -63,7 +63,7 @@ function mapRequest(row) {
   const rawVideoId = String(row.video_id || ''); const source = rawVideoId.match(/^(spotify|deezer|soundcloud):/)?.[1] || 'youtube'; const videoId = rawVideoId.replace(/^(spotify|deezer|soundcloud):/, ''); const externalUrl = source === 'deezer' ? `https://www.deezer.com/track/${videoId}` : source === 'soundcloud' ? `https://soundcloud.com/search/sounds?q=${encodeURIComponent(`${row.title} ${row.artist}`)}` : ''; return { id: row.id, title: row.title, artist: row.artist, videoId, source, spotifyId: videoId, externalUrl, thumbnail: row.thumbnail, requester: row.requester, dedication: row.dedication || '', likes: row.likes || 0, status: row.status, createdAt: row.created_at }
 }
 export function mapEvent(row, requests = []) {
-  return { id: row.id, code: row.code, name: row.name, djName: row.dj_name, contact: row.contact || '', yapeNumber: row.yape_number || '', thankYou: row.thank_you || '', createdAt: row.created_at, requests: requests.map(mapRequest) }
+  return { id: row.id, code: row.code, name: row.name, djName: row.dj_name, contact: row.contact || '', yapeNumber: row.yape_number || '', thankYou: row.thank_you || '', qrImage: row.qr_image_url || '', createdAt: row.created_at, requests: requests.map(mapRequest) }
 }
 
 export async function getPublicEvent(query) {
@@ -97,6 +97,20 @@ export async function updateDjEventInfo(eventId, input, token = getStoredDjSessi
   const { data, error } = await supabase.rpc('dj_update_event_info', { p_token: token, p_event_id: eventId, p_dj_name: input.djName, p_yape_number: input.yapeNumber, p_contact: input.contact })
   if (error) throw error
   return mapEvent(Array.isArray(data) ? data[0] : data, [])
+}
+
+export async function updateDjEventQr(eventId, qrImage, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) throw new Error('DJ session required')
+  const { data, error } = await supabase.rpc('dj_update_event_qr', { p_token: token, p_event_id: eventId, p_qr_image: qrImage || null })
+  if (error) throw error
+  return data
+}
+
+export async function getDjEventQr(eventId, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) return ''
+  const { data, error } = await supabase.rpc('dj_get_event_qr', { p_token: token, p_event_id: eventId })
+  if (error) throw error
+  return data || ''
 }
 
 export async function addSongRequest(eventId, song, form) {

@@ -5,8 +5,8 @@ export function Brand({ compact = false }) {
   const { t } = useLanguage()
   return (
     <div className="flex items-center gap-3">
-      <div className="neon-orb h-10 w-10 shrink-0 overflow-hidden rounded-2xl bg-black/30 shadow-glow">
-        <img src="/rc-music-logo.jpg" alt="R&C music" className="h-full w-full object-cover" />
+      <div className="neon-orb grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-neon/30 bg-white p-1 shadow-glow">
+        <img src="/rc-music-logo.jpg" alt="R&C music" className="h-full w-full rounded-xl object-contain" />
       </div>
       <div className={compact ? 'hidden sm:block' : ''}>
         <p className="font-display text-lg font-bold leading-none tracking-tight">RC music<span className="text-neon">_eventos</span></p>

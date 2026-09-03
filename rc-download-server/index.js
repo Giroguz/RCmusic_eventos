@@ -2,100 +2,198 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { spawn } from 'node:child_process'
-import { createReadStream } from 'node:fs'
+import { createReadStream, Readable } from 'node:fs'
 import { mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import crypto from 'node:crypto'
 
 const app = express()
 const port = Number(process.env.PORT || 8787)
-const corsOrigin = process.env.CORS_ORIGIN || '*'
+const frontendOrigin = process.env.FRONTEND_ORIGIN || 'https://r-cmusic-eventos.vercel.app'
+const corsOrigin = process.env.CORS_ORIGIN || frontendOrigin
+const driveFolderId = process.env.DRIVE_FOLDER_ID || '1UTIQESYvJcNdKXNsDdDs0dRCrDzs5JvF'
+const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://rcmusic-eventos.onrender.com/api/drive/callback'
 let tokenCache = { value: '', expiresAt: 0 }
+let driveCatalogCache = { files: [], expiresAt: 0 }
+const oauthStates = new Map()
 
-app.use(cors({ origin: corsOrigin }))
+app.use(cors({ origin: corsOrigin, credentials: true }))
 app.use(express.json())
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'rc-music-eventos-api' })
 })
 
+function parseCookies(req) {
+  return Object.fromEntries(String(req.headers.cookie || '').split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter(([key, value]) => key && value))
+}
+
+function cookie(name, value, maxAge = 60 * 60 * 24 * 30) {
+  return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=Lax`
+}
+
+function safeReturnTo(value) {
+  return String(value || frontendOrigin).startsWith(frontendOrigin) ? String(value || frontendOrigin) : frontendOrigin
+}
+
+app.get('/api/drive/auth', (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID
+  if (!clientId || !process.env.GOOGLE_CLIENT_SECRET) return res.status(503).json({ error: 'Google Drive no está configurado' })
+  const state = crypto.randomBytes(24).toString('hex')
+  oauthStates.set(state, safeReturnTo(req.query.returnTo))
+  setTimeout(() => oauthStates.delete(state), 10 * 60 * 1000)
+  const params = new URLSearchParams({ client_id: clientId, redirect_uri: googleRedirectUri, response_type: 'code', access_type: 'offline', prompt: 'consent', scope: 'https://www.googleapis.com/auth/drive.readonly', state })
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
+})
+
+app.get('/api/drive/callback', async (req, res) => {
+  const returnTo = oauthStates.get(String(req.query.state || '')) || frontendOrigin
+  oauthStates.delete(String(req.query.state || ''))
+  if (req.query.error) return res.redirect(`${safeReturnTo(returnTo)}?drive=denied`)
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ code: String(req.query.code || ''), client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, redirect_uri: googleRedirectUri, grant_type: 'authorization_code' }) })
+    const data = await response.json()
+    if (!response.ok || !data.refresh_token) throw new Error('No se obtuvo autorización de Google Drive')
+    res.setHeader('Set-Cookie', cookie('drive_refresh_token', data.refresh_token))
+    driveCatalogCache = { files: [], expiresAt: 0 }
+    res.redirect(`${safeReturnTo(returnTo)}?drive=connected`)
+  } catch (error) {
+    console.error(error.message)
+    res.redirect(`${safeReturnTo(returnTo)}?drive=error`)
+  }
+})
+
+async function getDriveAccessToken(req) {
+  const refreshToken = parseCookies(req).drive_refresh_token
+  if (!refreshToken) { const error = new Error('DRIVE_AUTH_REQUIRED'); error.code = 'DRIVE_AUTH_REQUIRED'; throw error }
+  if (tokenCache.value && tokenCache.expiresAt > Date.now() + 30_000) return tokenCache.value
+  const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, refresh_token: refreshToken, grant_type: 'refresh_token' }) })
+  const data = await response.json()
+  if (!response.ok) { const error = new Error('DRIVE_AUTH_REQUIRED'); error.code = 'DRIVE_AUTH_REQUIRED'; throw error }
+  tokenCache = { value: data.access_token, expiresAt: Date.now() + (data.expires_in * 1000) }
+  return tokenCache.value
+}
+
+async function driveList(accessToken, query, fields) {
+  const params = new URLSearchParams({ q: query, fields: `nextPageToken,files(${fields})`, pageSize: '1000', orderBy: 'name' })
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+  if (!response.ok) throw new Error('No se pudo consultar Google Drive')
+  return response.json()
+}
+
+async function getDriveCatalog(accessToken) {
+  if (driveCatalogCache.expiresAt > Date.now()) return driveCatalogCache.files
+  const folders = [driveFolderId]
+  const files = []
+  while (folders.length) {
+    const parent = folders.shift()
+    let pageToken = ''
+    do {
+      const params = new URLSearchParams({ q: `'${parent}' in parents and trashed = false`, fields: `nextPageToken,files(id,name,mimeType,size,parents,modifiedTime)`, pageSize: '1000', orderBy: 'name' })
+      if (pageToken) params.set('pageToken', pageToken)
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+      if (!response.ok) throw new Error('No se pudo leer la carpeta de Google Drive')
+      const data = await response.json()
+      for (const file of data.files || []) {
+        if (file.mimeType === 'application/vnd.google-apps.folder') folders.push(file.id)
+        else if (file.mimeType?.startsWith('audio/') || /\.(mp3|m4a|wav|aif|aiff|flac|ogg)$/i.test(file.name)) files.push(file)
+      }
+      pageToken = data.nextPageToken || ''
+    } while (pageToken)
+  }
+  driveCatalogCache = { files, expiresAt: Date.now() + 5 * 60 * 1000 }
+  return files
+}
+
+function normalizeText(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+async function findDriveFile(accessToken, query) {
+  const files = await getDriveCatalog(accessToken)
+  const wanted = normalizeText(query)
+  const words = wanted.split(' ').filter((word) => word.length > 1)
+  return files.map((file) => {
+    const name = normalizeText(file.name.replace(/\.[^.]+$/, ''))
+    const matches = words.filter((word) => name.includes(word)).length
+    const exact = name.includes(wanted) ? 100 : 0
+    return { file, score: exact + matches * 10 }
+  }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.file.name.localeCompare(b.file.name))[0]?.file || null
+}
+
+async function streamDriveFile(req, res, query, format) {
+  const accessToken = await getDriveAccessToken(req)
+  const file = await findDriveFile(accessToken, query)
+  if (!file) return false
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } })
+  if (!response.ok || !response.body) throw new Error('No se pudo descargar el archivo de Google Drive')
+  const extension = path.extname(file.name).slice(1).toLowerCase() || format
+  res.status(200).set({ 'Content-Type': response.headers.get('content-type') || 'application/octet-stream', 'Content-Length': response.headers.get('content-length') || undefined, 'Content-Disposition': `attachment; filename="${file.name.replace(/["\r\n]/g, '')}"`, 'Cache-Control': 'no-store' })
+  Readable.fromWeb(response.body).pipe(res)
+  return true
+}
+
 async function getSpotifyToken() {
   if (tokenCache.value && tokenCache.expiresAt > Date.now() + 30_000) return tokenCache.value
   const clientId = process.env.SPOTIFY_CLIENT_ID
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
   if (!clientId || !clientSecret) throw new Error('Spotify no está configurado en el servidor')
-
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
-  const response = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${basic}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-  })
+  const response = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=client_credentials' })
   if (!response.ok) throw new Error('No se pudo autenticar con Spotify')
   const data = await response.json()
-  tokenCache = {
-    value: data.access_token,
-    expiresAt: Date.now() + (data.expires_in * 1000),
-  }
+  tokenCache = { value: data.access_token, expiresAt: Date.now() + (data.expires_in * 1000) }
   return tokenCache.value
 }
 
 app.get('/api/spotify-search', async (req, res) => {
   const query = String(req.query.q || '').trim()
   if (!query) return res.status(400).json({ error: 'Falta la búsqueda' })
-
   try {
     const token = await getSpotifyToken()
     const params = new URLSearchParams({ q: query, type: 'track', limit: '8', market: 'PE' })
-    const response = await fetch(`https://api.spotify.com/v1/search?${params}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const response = await fetch(`https://api.spotify.com/v1/search?${params}`, { headers: { Authorization: `Bearer ${token}` } })
     if (!response.ok) return res.status(response.status).json({ error: 'Spotify no respondió' })
     const data = await response.json()
-    const tracks = (data.tracks?.items || []).map((track) => ({
-      id: track.id,
-      title: track.name,
-      artist: track.artists.map((artist) => artist.name).join(', '),
-      duration: `${Math.floor(track.duration_ms / 60000)}:${String(Math.floor((track.duration_ms % 60000) / 1000)).padStart(2, '0')}`,
-      thumbnail: track.album?.images?.[1]?.url || track.album?.images?.[0]?.url || '',
-    }))
-    return res.json({ tracks })
-  } catch (error) {
-    return res.status(503).json({ error: error.message })
-  }
+    return res.json({ tracks: (data.tracks?.items || []).map((track) => ({ id: track.id, title: track.name, artist: track.artists.map((artist) => artist.name).join(', '), duration: `${Math.floor(track.duration_ms / 60000)}:${String(Math.floor((track.duration_ms % 60000) / 1000)).padStart(2, '0')}`, thumbnail: track.album?.images?.[1]?.url || track.album?.images?.[0]?.url || '' })) })
+  } catch (error) { return res.status(503).json({ error: error.message }) }
 })
 
 app.post('/api/youtube-download', async (req, res) => {
   const videoId = String(req.body?.videoId || '')
   const query = String(req.body?.query || '').trim().replace(/[\r\n]+/g, ' ')
   const format = req.body?.format === 'm4a' ? 'm4a' : 'mp3'
-  // Direct YouTube IDs are preferred; other catalog providers use a title/artist search.
-  if (!/^[A-Za-z0-9_-]{11}$/.test(videoId) && (query.length < 2 || query.length > 160)) return res.status(400).json({ error: 'Canción inválida' })
+  const validVideoId = /^[A-Za-z0-9_-]{11}$/.test(videoId)
+  if (!validVideoId && (query.length < 2 || query.length > 160)) return res.status(400).json({ error: 'Canción inválida' })
+
+  // Search the user's private Drive catalog first for every requested song.
+  if (query) {
+    try {
+      if (await streamDriveFile(req, res, query, format)) return
+    } catch (error) {
+      if (error.code === 'DRIVE_AUTH_REQUIRED') return res.status(401).json({ error: 'DRIVE_AUTH_REQUIRED' })
+      console.error(error.message)
+    }
+  }
 
   const executable = process.env.YTDLP_PATH || path.join(process.cwd(), 'bin', 'yt-dlp')
-  const source = /^[A-Za-z0-9_-]{11}$/.test(videoId) ? `https://www.youtube.com/watch?v=${videoId}` : `ytsearch1:${query}`
+  const source = validVideoId ? `https://www.youtube.com/watch?v=${videoId}` : `ytsearch1:${query}`
   const directory = await mkdtemp(path.join(os.tmpdir(), 'rc-youtube-'))
   const outputBase = path.join(directory, 'audio')
   const args = ['--no-playlist', '--no-warnings', '-x', '--audio-format', format, '--audio-quality', '0', '-o', `${outputBase}.%(ext)s`, source]
   const child = spawn(executable, args, { stdio: ['ignore', 'ignore', 'pipe'] })
   let errorText = ''
   child.stderr.on('data', (chunk) => { errorText += String(chunk).slice(-2000) })
-
   try {
-    const code = await new Promise((resolve, reject) => {
-      child.once('error', reject)
-      child.once('close', resolve)
-    })
+    const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('close', resolve) })
     if (code !== 0) throw new Error(errorText || 'No se pudo preparar el audio')
     const files = await readdir(directory)
     const file = files.find((name) => name.endsWith(`.${format}`))
     if (!file) throw new Error('El archivo de audio no fue generado')
     const filePath = path.join(directory, file)
     const info = await stat(filePath)
-    res.status(200).set({ 'Content-Type': format === 'm4a' ? 'audio/mp4' : 'audio/mpeg', 'Content-Length': String(info.size), 'Content-Disposition': `attachment; filename="youtube-${videoId}.${format}"`, 'Cache-Control': 'no-store' })
+    res.status(200).set({ 'Content-Type': format === 'm4a' ? 'audio/mp4' : 'audio/mpeg', 'Content-Length': String(info.size), 'Content-Disposition': `attachment; filename="youtube-${videoId || 'search'}.${format}"`, 'Cache-Control': 'no-store' })
     createReadStream(filePath).pipe(res)
     res.once('finish', () => rm(directory, { recursive: true, force: true }).catch(() => {}))
   } catch (error) {
@@ -106,6 +204,4 @@ app.post('/api/youtube-download', async (req, res) => {
   req.once('close', () => { if (!res.writableEnded) child.kill('SIGTERM') })
 })
 
-app.listen(port, () => {
-  console.log(`RC music_eventos API escuchando en el puerto ${port}`)
-})
+app.listen(port, () => console.log(`RC music_eventos API escuchando en el puerto ${port}`))

@@ -51,7 +51,7 @@ const uiOverrides = {   es: { liveRequestsLabel: 'pedidos en vivo', footerTaglin
   hi: { configureProfile: 'सार्वजनिक प्रोफ़ाइल सेट करें', profileHint: 'ये जानकारी सक्रिय इवेंट में दर्शकों को दिखाई देगी।', stageName: 'कलात्मक नाम', yapeNameNumber: 'Yape नाम या नंबर', bookingContact: 'बुकिंग के लिए नंबर', stageNamePlaceholder: 'उदा. DJ Gianfranco', yapeProfilePlaceholder: 'उदा. Gianfranco · 999 888 777', bookingContactPlaceholder: '+51 999 888 777', saveProfile: 'सेटिंग सहेजें', profileSaved: 'सार्वजनिक प्रोफ़ाइल अपडेट हो गई।', profileSaveFailed: 'सेटिंग सहेजी नहीं जा सकी।' },
 }
 const translations = { es: { ...es, ...profileLabels.es, ...uiOverrides.es }, en: { ...en, ...profileLabels.en, ...uiOverrides.en }, pt: { ...pt, ...localeOverrides.pt, ...profileLabels.pt, ...uiOverrides.pt }, fr: { ...fr, ...localeOverrides.fr, ...profileLabels.fr, ...uiOverrides.fr }, ja: { ...ja, ...localeOverrides.ja, ...profileLabels.ja, ...uiOverrides.ja }, zh: { ...zh, ...localeOverrides.zh, ...profileLabels.zh, ...uiOverrides.zh }, hi: { ...hi, ...localeOverrides.hi, ...profileLabels.hi, ...uiOverrides.hi } }
-const fallback = es
+Object.keys(uiOverrides).forEach((code) => Object.assign(translations[code], uiOverrides[code])); const fallback = es
 const LanguageContext = createContext(null)
 
 export function LanguageProvider({ children }) {

@@ -2,6 +2,10 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { spawn } from 'node:child_process'
+import { createReadStream } from 'node:fs'
+import { mkdtemp, readdir, rm, stat } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 
 const app = express()
 const port = Number(process.env.PORT || 8787)
@@ -64,24 +68,41 @@ app.get('/api/spotify-search', async (req, res) => {
   }
 })
 
-app.post('/api/youtube-download', (req, res) => {
+app.post('/api/youtube-download', async (req, res) => {
   const videoId = String(req.body?.videoId || '')
   const format = req.body?.format === 'm4a' ? 'm4a' : 'mp3'
   // Accept only a YouTube video id; never pass arbitrary URLs to the downloader.
   if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return res.status(400).json({ error: 'ID de YouTube inválido' })
+
   const executable = process.env.YTDLP_PATH || 'yt-dlp'
   const source = `https://www.youtube.com/watch?v=${videoId}`
-  const args = ['--no-playlist', '--no-warnings', '-x', '--audio-format', format, '--audio-quality', '0', '-o', '-', source]
-  const child = spawn(executable, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'rc-youtube-'))
+  const outputBase = path.join(directory, 'audio')
+  const args = ['--no-playlist', '--no-warnings', '-x', '--audio-format', format, '--audio-quality', '0', '-o', `${outputBase}.%(ext)s`, source]
+  const child = spawn(executable, args, { stdio: ['ignore', 'ignore', 'pipe'] })
   let errorText = ''
-  let responded = false
   child.stderr.on('data', (chunk) => { errorText += String(chunk).slice(-2000) })
-  child.once('error', (error) => { if (!responded) res.status(503).json({ error: 'El servidor de descargas no está disponible' }); console.error(error.message) })
-  child.once('close', (code) => { if (code !== 0 && !responded && !res.headersSent) res.status(502).json({ error: 'No se pudo preparar el audio' }); if (code !== 0) console.error(errorText) })
+
+  try {
+    const code = await new Promise((resolve, reject) => {
+      child.once('error', reject)
+      child.once('close', resolve)
+    })
+    if (code !== 0) throw new Error(errorText || 'No se pudo preparar el audio')
+    const files = await readdir(directory)
+    const file = files.find((name) => name.endsWith(`.${format}`))
+    if (!file) throw new Error('El archivo de audio no fue generado')
+    const filePath = path.join(directory, file)
+    const info = await stat(filePath)
+    res.status(200).set({ 'Content-Type': format === 'm4a' ? 'audio/mp4' : 'audio/mpeg', 'Content-Length': String(info.size), 'Content-Disposition': `attachment; filename="youtube-${videoId}.${format}"`, 'Cache-Control': 'no-store' })
+    createReadStream(filePath).pipe(res)
+    res.once('finish', () => rm(directory, { recursive: true, force: true }).catch(() => {}))
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true }).catch(() => {})
+    if (!res.headersSent) res.status(502).json({ error: 'No se pudo preparar el audio' })
+    console.error(error.message)
+  }
   req.once('close', () => { if (!res.writableEnded) child.kill('SIGTERM') })
-  res.status(200).set({ 'Content-Type': format === 'm4a' ? 'audio/mp4' : 'audio/mpeg', 'Content-Disposition': `attachment; filename="youtube-${videoId}.${format}"`, 'Cache-Control': 'no-store' })
-  responded = true
-  child.stdout.pipe(res)
 })
 
 app.listen(port, () => {

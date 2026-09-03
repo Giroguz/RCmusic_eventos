@@ -1,5 +1,5 @@
 import { Radio } from 'lucide-react'
-import rcMusicLogo from '../assets/rc-music-logo.jpg'
+import rcMusicLogo from '../assets/1788413537933-832c4ec7.jpg'
 import { useLanguage } from '../lib/i18n'
 
 export function Brand({ compact = false }) {

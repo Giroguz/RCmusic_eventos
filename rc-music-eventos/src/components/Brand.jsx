@@ -3,6 +3,7 @@ import LanguagePicker from './LanguagePicker'
 import { useLanguage } from '../lib/i18n'
 
 export function Brand({ compact = false }) {
+  const { t } = useLanguage()
   return (
     <div className="flex items-center gap-3">
       <div className="neon-orb grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#ff8bc9] via-neon to-[#a855f7] text-ink shadow-glow">
@@ -10,7 +11,7 @@ export function Brand({ compact = false }) {
       </div>
       <div className={compact ? 'hidden sm:block' : ''}>
         <p className="font-display text-lg font-bold leading-none tracking-tight">RC music<span className="text-neon">_eventos</span></p>
-        <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[.17em] text-white/40"><Radio size={10} /> live requests</p>
+        <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[.17em] text-white/40"><Radio size={10} /> {t('liveRequestsLabel')}</p>
       </div>
     </div>
   )
@@ -27,7 +28,7 @@ export function AppShell({ children, onHome, right }) {
         </div>
       </header>
       <main>{children}</main>
-      <footer className="mx-auto max-w-6xl px-4 py-8 text-center text-xs text-white/30 sm:px-6 lg:px-8">RC music_eventos · haz que cada canción cuente</footer>
+      <footer className="mx-auto max-w-6xl px-4 py-8 text-center text-xs text-white/30 sm:px-6 lg:px-8">RC music_eventos · {t('footerTagline')}</footer>
     </div>
   )
 }

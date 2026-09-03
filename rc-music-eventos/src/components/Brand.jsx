@@ -10,9 +10,9 @@ export function Brand({ compact = false }) {
       <div className="neon-orb grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-neon/30 bg-white p-1 shadow-glow">
         <img src={rcMusicLogo} alt="R&C music" className="h-full w-full rounded-xl object-contain" />
       </div>
-      <div className={compact ? 'hidden sm:block' : ''}>
-        <p className="font-display text-lg font-bold leading-none tracking-tight">RC music<span className="text-neon">_eventos</span></p>
-        <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[.17em] text-white/40"><Radio size={10} /> {t('liveRequestsLabel')}</p>
+      <div className="min-w-0">
+        <p className="brand-wordmark" aria-label="RCmusic_eventos"><span className="brand-wordmark__rc">RC</span><span className="brand-wordmark__music">music</span><span className="brand-wordmark__events">_eventos</span></p>
+        {!compact && <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[.17em] text-white/40"><Radio size={10} /> {t('liveRequestsLabel')}</p>}
       </div>
     </div>
   )

@@ -50,7 +50,7 @@ export default function DjApp({ onExit, session }) {
   const [notice, setNotice] = useState('')
   const [filter, setFilter] = useState('all')
   const [sortMode, setSortMode] = useState('likes')
-  const [form, setForm = useState({ name: '', contact: '', yapeNumber: '', thankYou: '' })
+  const [form, setForm] = useState({ name: '', contact: '', yapeNumber: '', thankYou: '' })
   const [profileForm, setProfileForm] = useState({ djName: '', yapeNumber: '', contact: '', qrImage: '', tipsRequired: false })
   const [qrLoading, setQrLoading] = useState(false)
   const activeEvent = events.find((event) => event.id === activeId) || events[0]

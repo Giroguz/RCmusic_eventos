@@ -60,7 +60,7 @@ export async function signOutDj(token = getStoredDjSession()?.token) {
 }
 
 function mapRequest(row) {
-  return { id: row.id, title: row.title, artist: row.artist, videoId: row.video_id, source: String(row.video_id || '').startsWith('spotify:') ? 'spotify' : 'youtube', spotifyId: String(row.video_id || '').replace(/^spotify:/, ''), thumbnail: row.thumbnail, requester: row.requester, dedication: row.dedication || '', likes: row.likes || 0, status: row.status, createdAt: row.created_at }
+  const videoId = String(row.video_id || ''); const source = videoId.match(/^(spotify|deezer|soundcloud):/)?.[1] || 'youtube'; return { id: row.id, title: row.title, artist: row.artist, videoId, source, spotifyId: videoId.replace(/^spotify:/, ''), thumbnail: row.thumbnail, requester: row.requester, dedication: row.dedication || '', likes: row.likes || 0, status: row.status, createdAt: row.created_at }
 }
 export function mapEvent(row, requests = []) {
   return { id: row.id, code: row.code, name: row.name, djName: row.dj_name, contact: row.contact || '', yapeNumber: row.yape_number || '', thankYou: row.thank_you || '', createdAt: row.created_at, requests: requests.map(mapRequest) }
@@ -100,7 +100,7 @@ export async function updateDjEventInfo(eventId, input, token = getStoredDjSessi
 }
 
 export async function addSongRequest(eventId, song, form) {
-  const { data, error } = await supabase.from('song_requests').insert({ event_id: eventId, video_id: song.source === 'spotify' ? `spotify:${song.id}` : song.id, title: song.title, artist: song.artist, thumbnail: song.thumbnail, requester: form.requester, dedication: form.dedication || null }).select().single()
+  const { data, error } = await supabase.from('song_requests').insert({ event_id: eventId, video_id: song.source === 'youtube' ? song.id : `${song.source}:${song.id}`, title: song.title, artist: song.artist, thumbnail: song.thumbnail, requester: form.requester, dedication: form.dedication || null }).select().single()
   if (error) throw error
   return mapRequest(data)
 }

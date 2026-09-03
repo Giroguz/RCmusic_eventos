@@ -70,12 +70,13 @@ app.get('/api/spotify-search', async (req, res) => {
 
 app.post('/api/youtube-download', async (req, res) => {
   const videoId = String(req.body?.videoId || '')
+  const query = String(req.body?.query || '').trim().replace(/[\r\n]+/g, ' ')
   const format = req.body?.format === 'm4a' ? 'm4a' : 'mp3'
-  // Accept only a YouTube video id; never pass arbitrary URLs to the downloader.
-  if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return res.status(400).json({ error: 'ID de YouTube inválido' })
+  // Direct YouTube IDs are preferred; other catalog providers use a title/artist search.
+  if (!/^[A-Za-z0-9_-]{11}$/.test(videoId) && (query.length < 2 || query.length > 160)) return res.status(400).json({ error: 'Canción inválida' })
 
   const executable = process.env.YTDLP_PATH || path.join(process.cwd(), 'bin', 'yt-dlp')
-  const source = `https://www.youtube.com/watch?v=${videoId}`
+  const source = /^[A-Za-z0-9_-]{11}$/.test(videoId) ? `https://www.youtube.com/watch?v=${videoId}` : `ytsearch1:${query}`
   const directory = await mkdtemp(path.join(os.tmpdir(), 'rc-youtube-'))
   const outputBase = path.join(directory, 'audio')
   const args = ['--no-playlist', '--no-warnings', '-x', '--audio-format', format, '--audio-quality', '0', '-o', `${outputBase}.%(ext)s`, source]

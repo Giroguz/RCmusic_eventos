@@ -7,12 +7,7 @@ const MOCK_TRACKS = [
   { id: 'OPf0YbXqDm0', title: 'Uptown Funk', artist: 'Mark Ronson ft. Bruno Mars', duration: '4:30', source: 'youtube' },
 ]
 
-export const MUSIC_PROVIDERS = [
-  { id: 'youtube', label: 'YouTube' },
-  { id: 'deezer', label: 'Deezer' },
-  { id: 'soundcloud', label: 'SoundCloud' },
-  { id: 'spotify', label: 'Spotify' },
-]
+export const MUSIC_PROVIDERS = [{ id: 'youtube', label: 'YouTube' }]
 
 function formatDuration(seconds) {
   const total = Number(seconds)
@@ -83,16 +78,8 @@ function externalSearch(provider, query) {
   return { id: `external-${provider}-${encodeURIComponent(query)}`, title: `Buscar “${query}” en ${labels[provider]}`, artist: 'Abrir resultados del proveedor', duration: '', source: provider, external: true, externalUrl: urls[provider], thumbnail: '' }
 }
 
-export async function searchTracks(query, provider = 'all') {
+export async function searchTracks(query) {
   const normalized = query.trim()
   if (!normalized) return []
-  const providers = provider === 'all' ? ['youtube', 'deezer', 'soundcloud', 'spotify'] : [provider]
-  const searches = { youtube: searchYoutube, deezer: searchDeezer, soundcloud: searchSoundCloud, spotify: searchSpotify }
-  const settled = await Promise.allSettled(providers.map((name) => searches[name](normalized)))
-  const results = settled.flatMap((result) => result.status === 'fulfilled' ? result.value : [])
-  const liveSources = new Set(results.map((track) => track.source))
-  const external = providers.filter((name) => name !== 'youtube' && !liveSources.has(name)).map((name) => externalSearch(name, normalized))
-  const unique = new Map()
-  ;[...results, ...external].forEach((track) => unique.set(`${track.source}:${track.id}`, track))
-  return [...unique.values()]
+  return searchYoutube(normalized)
 }

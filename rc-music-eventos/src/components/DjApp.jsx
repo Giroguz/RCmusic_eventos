@@ -105,13 +105,19 @@ export default function DjApp({ onExit, session }) {
   async function updateEvent(nextEvent) {
     const previous = activeEvent
     const next = events.map((event) => event.id === nextEvent.id ? nextEvent : event)
-    if (supabaseEnabled && previous) {
-      const changed = nextEvent.requests.find((request) => previous.requests.find((oldRequest) => oldRequest.id === request.id && oldRequest.status !== request.status))
-      if (changed) await setRequestStatus(changed.id, changed.status, session?.token)
-    } else {
-      saveEvents(next)
-    }
+    // Actualiza la cola de inmediato para que cualquier estado responda al clic.
     setEvents(next)
+    try {
+      if (supabaseEnabled && previous) {
+        const changed = nextEvent.requests.find((request) => previous.requests.find((oldRequest) => oldRequest.id === request.id && oldRequest.status !== request.status))
+        if (changed) await setRequestStatus(changed.id, changed.status, session?.token)
+      } else {
+        saveEvents(next)
+      }
+    } catch {
+      setNotice(t('updateDjError'))
+      setTimeout(() => setNotice(''), 4000)
+    }
   }
 
   function markStatus(id, status) {

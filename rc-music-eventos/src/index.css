@@ -29,8 +29,20 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .app-shell main, .app-shell main > div { min-width: 0; max-width: 100%; overflow-x: hidden; }
 .party-page .glass, .app-shell .glass { border-color: rgba(255,255,255,.13); background-color: rgba(16,8,22,.55); }
 .home-visual { position: relative; overflow: hidden; border: 1px solid rgba(255,62,165,.24); background: #130717; box-shadow: 0 0 55px rgba(255,23,151,.1); }
-.home-visual::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,3,13,.95), rgba(8,3,13,.18) 65%, rgba(8,3,13,.72)); pointer-events: none; }
-.home-visual img { filter: saturate(1.3) contrast(1.05); }
+.party-banner::after { content: ''; position: absolute; inset: 0; z-index: 2; background: linear-gradient(90deg, rgba(8,3,13,.92), rgba(8,3,13,.18) 68%, rgba(8,3,13,.68)); pointer-events: none; }
+.party-banner__surface { position: absolute; inset: 1px; overflow: hidden; border-radius: inherit; background: radial-gradient(circle at 78% 34%, rgba(45,226,230,.2), transparent 22%), radial-gradient(circle at 26% 72%, rgba(255,62,165,.24), transparent 27%), linear-gradient(115deg, #09040f, #1b071d 52%, #080510); }
+.party-banner__surface::before { content: ''; position: absolute; inset: -45%; background: conic-gradient(from 210deg, transparent, rgba(255,62,165,.28), transparent 23%, rgba(45,226,230,.16), transparent 52%); filter: blur(22px); animation: party-banner-spin 13s linear infinite; }
+.party-banner__light { position: absolute; z-index: 1; width: 35%; height: 170%; top: -35%; filter: blur(22px); opacity: .42; transform: rotate(25deg); animation: party-banner-sweep 6s ease-in-out infinite alternate; }
+.party-banner__light--pink { left: 24%; background: linear-gradient(90deg, transparent, rgba(255,62,165,.55), transparent); }
+.party-banner__light--turquoise { right: 18%; background: linear-gradient(90deg, transparent, rgba(45,226,230,.35), transparent); animation-delay: -2.5s; }
+.party-banner__equalizer { position: absolute; z-index: 1; right: 6%; bottom: 12%; display: flex; align-items: end; gap: 4px; height: 42%; opacity: .55; }
+.party-banner__equalizer span { display: block; width: 4px; height: 35%; border-radius: 999px; background: linear-gradient(#2de2e6, #ff3ea5); animation: party-banner-bars 900ms ease-in-out infinite alternate; animation-delay: var(--bar-delay); }
+.party-banner__equalizer span:nth-child(3n) { height: 76%; }
+.party-banner__equalizer span:nth-child(4n) { height: 52%; }
+@keyframes party-banner-spin { to { transform: rotate(360deg); } }
+@keyframes party-banner-sweep { from { transform: translateX(-20%) rotate(25deg); } to { transform: translateX(35%) rotate(25deg); } }
+@keyframes party-banner-bars { from { transform: scaleY(.45); opacity: .45; } to { transform: scaleY(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .party-banner__surface::before, .party-banner__light, .party-banner__equalizer span { animation: none; } }
 .neon-orb { box-shadow: 0 0 45px rgba(255,62,165,.4), inset 0 0 24px rgba(255,255,255,.18); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }

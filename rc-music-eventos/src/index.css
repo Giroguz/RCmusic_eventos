@@ -43,6 +43,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 @keyframes party-banner-sweep { from { transform: translateX(-20%) rotate(25deg); } to { transform: translateX(35%) rotate(25deg); } }
 @keyframes party-banner-bars { from { transform: scaleY(.45); opacity: .45; } to { transform: scaleY(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .party-banner__surface::before, .party-banner__light, .party-banner__equalizer span { animation: none; } }
+.search-result__title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .neon-orb { box-shadow: 0 0 45px rgba(255,62,165,.4), inset 0 0 24px rgba(255,255,255,.18); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }

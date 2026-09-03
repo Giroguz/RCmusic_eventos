@@ -143,11 +143,11 @@ export default function DjApp({ onExit, session }) {
       '',
       ...entries,
     ].join(`${lineBreak}${lineBreak}`)
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const blob = new Blob([`\ufeff${content}`], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `canciones-tocadas-${activeEvent.code}.txt`
+    link.download = `lista-canciones-tocadas-${activeEvent.code}-ordenada.txt`
     document.body.appendChild(link)
     link.click()
     link.remove()

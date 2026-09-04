@@ -15,9 +15,12 @@ const frontendOrigin = process.env.FRONTEND_ORIGIN || 'https://r-cmusic-eventos.
 const corsOrigin = process.env.CORS_ORIGIN || frontendOrigin
 const driveFolderId = process.env.DRIVE_FOLDER_ID || '1UTIQESYvJcNdKXNsDdDs0dRCrDzs5JvF'
 const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://rcmusic-eventos.onrender.com/api/drive/callback'
-let tokenCache = { value: '', expiresAt: 0 }
+let driveTokenCache = { value: '', expiresAt: 0 }
+let spotifyTokenCache = { value: '', expiresAt: 0 }
 let driveCatalogCache = { files: [], expiresAt: 0 }
 const oauthStates = new Map()
+const driveSessions = new Map()
+const driveSessionTtl = 60 * 60 * 24 * 30 * 1000
 
 app.use(cors({ origin: corsOrigin, credentials: true }))
 app.use(express.json())
@@ -27,11 +30,22 @@ app.get('/health', (_req, res) => {
 })
 
 function parseCookies(req) {
-  return Object.fromEntries(String(req.headers.cookie || '').split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter(([key, value]) => key && value))
+  return Object.fromEntries(String(req.headers.cookie || '').split(';').map((part) => {
+    const index = part.indexOf('=')
+    if (index < 0) return ['', '']
+    return [decodeURIComponent(part.slice(0, index).trim()), decodeURIComponent(part.slice(index + 1).trim())]
+  }).filter(([key, value]) => key && value))
 }
 
 function cookie(name, value, maxAge = 60 * 60 * 24 * 30) {
   return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`
+}
+
+function redirectWithDriveSession(returnTo, sessionId) {
+  const target = new URL(safeReturnTo(returnTo))
+  target.searchParams.set('drive', 'connected')
+  target.searchParams.set('drive_session', sessionId)
+  return target.toString()
 }
 
 function safeReturnTo(value) {
@@ -56,9 +70,12 @@ app.get('/api/drive/callback', async (req, res) => {
     const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ code: String(req.query.code || ''), client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, redirect_uri: googleRedirectUri, grant_type: 'authorization_code' }) })
     const data = await response.json()
     if (!response.ok || !data.refresh_token) throw new Error('No se obtuvo autorización de Google Drive')
+    const sessionId = crypto.randomBytes(32).toString('hex')
+    driveSessions.set(sessionId, { refreshToken: data.refresh_token, expiresAt: Date.now() + driveSessionTtl })
+    setTimeout(() => driveSessions.delete(sessionId), driveSessionTtl)
     res.setHeader('Set-Cookie', cookie('drive_refresh_token', data.refresh_token))
     driveCatalogCache = { files: [], expiresAt: 0 }
-    res.redirect(`${safeReturnTo(returnTo)}?drive=connected`)
+    res.redirect(redirectWithDriveSession(returnTo, sessionId))
   } catch (error) {
     console.error(error.message)
     res.redirect(`${safeReturnTo(returnTo)}?drive=error`)
@@ -66,14 +83,17 @@ app.get('/api/drive/callback', async (req, res) => {
 })
 
 async function getDriveAccessToken(req) {
-  const refreshToken = parseCookies(req).drive_refresh_token
+  const sessionId = String(req.headers['x-drive-session'] || '')
+  const session = sessionId ? driveSessions.get(sessionId) : null
+  if (session && session.expiresAt <= Date.now()) driveSessions.delete(sessionId)
+  const refreshToken = session && session.expiresAt > Date.now() ? session.refreshToken : parseCookies(req).drive_refresh_token
   if (!refreshToken) { const error = new Error('DRIVE_AUTH_REQUIRED'); error.code = 'DRIVE_AUTH_REQUIRED'; throw error }
-  if (tokenCache.value && tokenCache.expiresAt > Date.now() + 30_000) return tokenCache.value
+  if (driveTokenCache.value && driveTokenCache.expiresAt > Date.now() + 30_000) return driveTokenCache.value
   const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, refresh_token: refreshToken, grant_type: 'refresh_token' }) })
   const data = await response.json()
   if (!response.ok) { const error = new Error('DRIVE_AUTH_REQUIRED'); error.code = 'DRIVE_AUTH_REQUIRED'; throw error }
-  tokenCache = { value: data.access_token, expiresAt: Date.now() + (data.expires_in * 1000) }
-  return tokenCache.value
+  driveTokenCache = { value: data.access_token, expiresAt: Date.now() + (data.expires_in * 1000) }
+  return driveTokenCache.value
 }
 
 async function driveList(accessToken, query, fields) {
@@ -123,6 +143,13 @@ async function findDriveFile(accessToken, query) {
   }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.file.name.localeCompare(b.file.name))[0]?.file || null
 }
 
+app.get('/api/drive/status', (req, res) => {
+  const sessionId = String(req.headers['x-drive-session'] || '')
+  const session = sessionId ? driveSessions.get(sessionId) : null
+  const cookieToken = parseCookies(req).drive_refresh_token
+  res.json({ authenticated: Boolean((session && session.expiresAt > Date.now()) || cookieToken) })
+})
+
 app.get('/api/drive/search', async (req, res) => {
   const query = String(req.query.q || '').trim()
   if (query.length < 2 || query.length > 160) return res.status(400).json({ error: 'Búsqueda inválida' })
@@ -157,7 +184,7 @@ async function streamDriveFile(req, res, query, format) {
 }
 
 async function getSpotifyToken() {
-  if (tokenCache.value && tokenCache.expiresAt > Date.now() + 30_000) return tokenCache.value
+  if (spotifyTokenCache.value && spotifyTokenCache.expiresAt > Date.now() + 30_000) return spotifyTokenCache.value
   const clientId = process.env.SPOTIFY_CLIENT_ID
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
   if (!clientId || !clientSecret) throw new Error('Spotify no está configurado en el servidor')
@@ -165,8 +192,8 @@ async function getSpotifyToken() {
   const response = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=client_credentials' })
   if (!response.ok) throw new Error('No se pudo autenticar con Spotify')
   const data = await response.json()
-  tokenCache = { value: data.access_token, expiresAt: Date.now() + (data.expires_in * 1000) }
-  return tokenCache.value
+  spotifyTokenCache = { value: data.access_token, expiresAt: Date.now() + (data.expires_in * 1000) }
+  return spotifyTokenCache.value
 }
 
 app.get('/api/spotify-search', async (req, res) => {

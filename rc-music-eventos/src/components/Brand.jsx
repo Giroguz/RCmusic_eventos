@@ -22,7 +22,7 @@ export function AppShell({ children, onHome, right }) {
   const { t } = useLanguage()
   return (
     <div className="app-shell min-h-screen overflow-x-hidden bg-ink bg-grid">
-      <header className="sticky top-0 z-30 border-b border-neon/10 bg-[#08050d]/75 backdrop-blur-xl">
+      <header className="sticky top-0 isolate border-b border-neon/10 bg-[#08050d]/75 backdrop-blur-xl" style={{ zIndex: 10000 }}>
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:flex-nowrap sm:gap-3 sm:px-6 sm:py-4 lg:px-8">
           <div className="flex w-full min-w-0 items-center sm:w-auto">
             <button onClick={onHome} aria-label={t('home')} className="shrink-0"><Brand compact /></button>

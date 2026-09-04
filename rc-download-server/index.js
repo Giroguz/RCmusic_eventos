@@ -105,7 +105,7 @@ app.get('/api/drive/callback', async (req, res) => {
 })
 
 async function getDriveAccessToken(req) {
-  const sessionId = String(req.headers['x-drive-session'] || '')
+  const sessionId = String(req.headers['x-drive-session'] || req.query.drive_session || '')
   const session = sessionId ? driveSessions.get(sessionId) : null
   if (session && session.expiresAt <= Date.now()) driveSessions.delete(sessionId)
   const cookieValue = parseCookies(req).drive_refresh_token

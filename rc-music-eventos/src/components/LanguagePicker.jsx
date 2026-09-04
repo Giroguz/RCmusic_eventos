@@ -1,12 +1,25 @@
+import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { LANGUAGES, useLanguage } from '../lib/i18n'
 
 const FLAGS = { es: '🇪🇸', en: '🇬🇧', pt: '🇵🇹', fr: '🇫🇷', ja: '🇯🇵', zh: '🇨🇳', hi: '🇮🇳' }
 
 export default function LanguagePicker({ compact = false }) {
   const { language, setLanguage, t } = useLanguage()
-  return <label className={`inline-flex min-w-0 items-center rounded-xl border border-white/10 bg-white/[.05] text-white/65 ${compact ? 'px-1.5 py-1.5 text-[11px]' : 'px-2 py-1.5 text-xs'}`} title={t('languageLabel')}>
-    <select aria-label={t('languageLabel')} value={language} onChange={(e) => setLanguage(e.target.value)} className={`min-w-0 bg-transparent font-semibold text-white outline-none ${compact ? 'max-w-[116px] text-[11px]' : 'max-w-[134px] text-xs sm:max-w-none'}`}>
-      {LANGUAGES.map((item) => <option key={item.code} value={item.code} className="bg-ink text-white">{FLAGS[item.code] || '🌐'} {item.label}</option>)}
-    </select>
-  </label>
+  const [open, setOpen] = useState(false)
+  const current = LANGUAGES.find((item) => item.code === language) || LANGUAGES[0]
+  const currentFlag = FLAGS[current.code] || '🌐'
+
+  return <div className={`relative inline-flex min-w-0 rounded-xl border border-white/10 bg-white/[.05] text-white/65 ${compact ? 'p-1' : 'p-1.5'}`} title={t('languageLabel')}>
+    <button type="button" onClick={() => setOpen((value) => !value)} aria-label={t('languageLabel')} aria-haspopup="listbox" aria-expanded={open} className={`inline-flex min-w-0 items-center rounded-lg text-white hover:bg-white/[.07] ${compact ? 'gap-1 px-1 py-0.5 text-[11px]' : 'gap-1.5 px-1 py-0.5 text-xs'}`}>
+      <span aria-hidden="true" className="shrink-0 text-sm leading-none">{currentFlag}</span>
+      <span className="truncate font-semibold">{current.label}</span>
+      <ChevronDown size={compact ? 12 : 13} className={`ml-0.5 shrink-0 text-white/45 transition-transform ${open ? 'rotate-180' : ''}`} />
+    </button>
+    {open && <div role="listbox" aria-label={t('languageLabel')} className="absolute right-0 top-full z-50 mt-1.5 min-w-[154px] overflow-hidden rounded-xl border border-white/15 bg-[#292433] p-1 shadow-2xl shadow-black/50">
+      {LANGUAGES.map((item) => <button type="button" role="option" aria-selected={item.code === language} key={item.code} onClick={() => { setLanguage(item.code); setOpen(false) }} className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-colors ${item.code === language ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/[.08] hover:text-white'}`}>
+        <span aria-hidden="true" className="text-base leading-none">{FLAGS[item.code] || '🌐'}</span><span>{item.label}</span>
+      </button>)}
+    </div>}
+  </div>
 }

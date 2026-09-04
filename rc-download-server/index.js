@@ -31,7 +31,7 @@ function parseCookies(req) {
 }
 
 function cookie(name, value, maxAge = 60 * 60 * 24 * 30) {
-  return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=Lax`
+  return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`
 }
 
 function safeReturnTo(value) {

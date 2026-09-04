@@ -8,7 +8,9 @@ import { getEvents, saveEvents } from './lib/storage'
 import { supabaseEnabled, ensureAnonymousSession, setRequestStatus } from './lib/supabase'
 
 export default function App() {
-  const [screen, setScreen] = useState('home')
+  const [screen, setScreen] = useState(() => {
+    try { return localStorage.getItem('rc_drive_return_screen') === 'dj' && localStorage.getItem('rc_drive_session') ? 'dj' : 'home' } catch { return 'home' }
+  })
   const [activeEvent, setActiveEvent] = useState(null)
 
   useEffect(() => {
@@ -16,6 +18,12 @@ export default function App() {
     getEvents()
     if (supabaseEnabled) ensureAnonymousSession().catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (screen === 'dj') {
+      try { localStorage.removeItem('rc_drive_return_screen') } catch {}
+    }
+  }, [screen])
 
   async function updateEvent(nextEvent) {
     const previous = activeEvent

@@ -76,7 +76,7 @@ function safeReturnTo(value) {
 app.get('/api/drive/auth', (req, res) => {
   const clientId = process.env.GOOGLE_CLIENT_ID
   if (!clientId || !process.env.GOOGLE_CLIENT_SECRET) return res.status(503).json({ error: 'Google Drive no está configurado' })
-  const state = crypto.randomBytes(24).toString('hex')
+  const state = encryptDriveRefreshToken(safeReturnTo(req.query.returnTo))
   oauthStates.set(state, safeReturnTo(req.query.returnTo))
   setTimeout(() => oauthStates.delete(state), 10 * 60 * 1000)
   const params = new URLSearchParams({ client_id: clientId, redirect_uri: googleRedirectUri, response_type: 'code', access_type: 'offline', prompt: 'consent', scope: 'https://www.googleapis.com/auth/drive.readonly', state })
@@ -84,7 +84,7 @@ app.get('/api/drive/auth', (req, res) => {
 })
 
 app.get('/api/drive/callback', async (req, res) => {
-  const returnTo = oauthStates.get(String(req.query.state || '')) || frontendOrigin
+  const returnTo = safeReturnTo(decryptDriveRefreshToken(String(req.query.state || ''))) || frontendOrigin
   oauthStates.delete(String(req.query.state || ''))
   if (req.query.error) return res.redirect(`${safeReturnTo(returnTo)}?drive=denied`)
   try {

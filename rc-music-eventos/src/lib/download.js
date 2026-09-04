@@ -29,7 +29,7 @@ async function handleDriveResponse(response) {
   if (response.ok) return response
   const error = (await response.json().catch(() => null))?.error
   if (response.status === 401 && error === 'DRIVE_AUTH_REQUIRED') {
-    try { localStorage.removeItem('rc_drive_session'); sessionStorage.removeItem('rc_drive_session') } catch {}
+    try { localStorage.removeItem('rc_drive_session'); sessionStorage.removeItem('rc_drive_session'); localStorage.setItem('rc_drive_return_screen', 'dj') } catch {}
     window.location.href = `${apiBase}/drive/auth?returnTo=${encodeURIComponent(window.location.href)}`
   }
   throw new Error(error || 'DOWNLOAD_FAILED')
@@ -53,7 +53,7 @@ export async function downloadDriveAudio(fileId, fileName = 'cancion') {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = String(fileName || 'cancion').replace(/[\p{L}\p{N}_-]+/gu, (value) => value).replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-|-$/g, '') || 'cancion'
+  link.download = String(fileName || 'cancion').replace(/[\\p{L}\\p{N}_-]+/gu, (value) => value).replace(/[^\\p{L}\\p{N}_-]+/gu, '-').replace(/^-|-$/g, '') || 'cancion'
   document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
 }
 
@@ -70,6 +70,6 @@ export async function downloadYoutubeAudio(videoId, _format = 'mp3', fileName = 
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `${String(fileName).replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-|-$/g, '') || 'cancion'}.mp3`
+  link.download = `${String(fileName).replace(/[^\\p{L}\\p{N}_-]+/gu, '-').replace(/^-|-$/g, '') || 'cancion'}.mp3`
   document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
 }

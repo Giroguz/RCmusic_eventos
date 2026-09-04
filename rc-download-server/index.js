@@ -91,7 +91,7 @@ app.get('/api/drive/callback', async (req, res) => {
     const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ code: String(req.query.code || ''), client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, redirect_uri: googleRedirectUri, grant_type: 'authorization_code' }) })
     const data = await response.json()
     if (!response.ok || !data.refresh_token) throw new Error('No se obtuvo autorización de Google Drive')
-    const sessionId = crypto.randomBytes(32).toString('hex')
+    // The session token is opaque and encrypted, so it remains valid if the next request reaches another Render instance.     const sessionId = encryptDriveRefreshToken(data.refresh_token)
     driveSessions.set(sessionId, { refreshToken: data.refresh_token, expiresAt: Date.now() + driveSessionTtl })
     setTimeout(() => driveSessions.delete(sessionId), driveSessionTtl)
     res.setHeader('Set-Cookie', cookie('drive_refresh_token', encryptDriveRefreshToken(data.refresh_token)))
@@ -110,7 +110,7 @@ async function getDriveAccessToken(req) {
   const cookieValue = parseCookies(req).drive_refresh_token
   // Prefer the in-memory session, but fall back to the encrypted cookie so a
   // request routed to another Render instance survives the OAuth callback.
-  const refreshToken = session && session.expiresAt > Date.now() ? session.refreshToken : (decryptDriveRefreshToken(cookieValue) || cookieValue)
+  const refreshToken = session && session.expiresAt > Date.now() ? session.refreshToken : (decryptDriveRefreshToken(sessionId) || decryptDriveRefreshToken(cookieValue) || cookieValue)
   if (!refreshToken) { const error = new Error('DRIVE_AUTH_REQUIRED'); error.code = 'DRIVE_AUTH_REQUIRED'; throw error }
   // Never share an access token between DJs. A viewer session must use the
   // Google account that owns the corresponding Drive permission.

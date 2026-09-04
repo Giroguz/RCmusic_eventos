@@ -19,7 +19,7 @@
 .brand-wordmark__events { color: #ff3ea5; text-shadow: 0 0 4px rgba(255,62,165,.85), 0 0 12px rgba(255,62,165,.58); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
-@media (prefers-reduced-motion: reduce) { .party-page::before, .app-shell::before { background-image: linear-gradient(115deg, rgba(5,3,10,.97), rgba(17,5,10,.88)), url('/dj-console.gif'); } }
+@media (prefers-reduced-motion: reduce) { .party-page::before, .app-shell::before { background-image: linear-gradient(115deg, rgba(5,3,10,.97), rgba(17,5,22,.88)), url('/dj-console.gif'); } }
 
 /* Neon status palette for DJ requests */
 .app-shell div[class*="border-b"][class*="last:border-0"] span.text-emerald-300 { color: #39ff88 !important; text-shadow: 0 0 10px rgba(57,255,136,.85); }

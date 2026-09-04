@@ -91,7 +91,8 @@ app.get('/api/drive/callback', async (req, res) => {
     const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ code: String(req.query.code || ''), client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, redirect_uri: googleRedirectUri, grant_type: 'authorization_code' }) })
     const data = await response.json()
     if (!response.ok || !data.refresh_token) throw new Error('No se obtuvo autorización de Google Drive')
-    // The session token is opaque and encrypted, so it remains valid if the next request reaches another Render instance.     const sessionId = encryptDriveRefreshToken(data.refresh_token)
+    // The session token is opaque and encrypted, so it remains valid if the next request reaches another Render instance.
+    const sessionId = encryptDriveRefreshToken(data.refresh_token)
     driveSessions.set(sessionId, { refreshToken: data.refresh_token, expiresAt: Date.now() + driveSessionTtl })
     setTimeout(() => driveSessions.delete(sessionId), driveSessionTtl)
     res.setHeader('Set-Cookie', cookie('drive_refresh_token', encryptDriveRefreshToken(data.refresh_token)))

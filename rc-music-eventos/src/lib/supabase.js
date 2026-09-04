@@ -51,7 +51,7 @@ export async function getDjAccess(token = getStoredDjSession()?.token) {
   const { data, error } = await supabase.rpc('dj_check_access', { p_token: token })
   if (error) throw error
   const access = Array.isArray(data) ? data[0] : data
-  if (!access?.is_active || (access.role !== 'admin' && (!access.plan_expires_at || new Date(access.plan_expires_at).getTime() <= Date.now()))) { storeDjSession(null); return null }
+  if (!access?.is_active) { storeDjSession(null); return null }
   return { token, ...access }
 }
 
@@ -149,6 +149,23 @@ export async function adminCreateDj(input, token) { const { data, error } = awai
 export async function adminSetDjState(id, state, token) { const { data, error } = await supabase.rpc('admin_set_dj_state', { p_token: token, p_dj_id: id, p_approved: state.approved, p_blocked: state.blocked }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminSetDjPlan(id, planType, token) { const { data, error } = await supabase.rpc('admin_set_dj_plan', { p_token: token, p_dj_id: id, p_plan_type: planType }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminRegenerateCode(id, token) { const { data, error } = await supabase.rpc('admin_regenerate_code', { p_token: token, p_dj_id: id }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
+
+export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}) {
+  if (!supabase || !eventId) return () => {}
+  const channel = supabase.channel(`event-presence-${eventId}`)
+  const update = () => {
+    const state = channel.presenceState()
+    const attendees = Object.values(state).flat().filter((presence) => presence?.role === 'attendee')
+    callback(new Set(attendees.map((presence) => presence.clientId || presence.joinedAt || JSON.stringify(presence))).size)
+  }
+  channel.on('presence', { event: 'sync' }, update).on('presence', { event: 'join' }, update).on('presence', { event: 'leave' }, update).subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await channel.track({ role, clientId: `${role}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`, joinedAt: Date.now() })
+      update()
+    }
+  })
+  return () => { supabase.removeChannel(channel) }
+}
 
 export function subscribeToEvent(eventId, callback) {
   if (!supabase) return () => {}

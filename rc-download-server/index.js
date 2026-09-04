@@ -150,6 +150,22 @@ app.get('/api/drive/status', (req, res) => {
   res.json({ authenticated: Boolean((session && session.expiresAt > Date.now()) || cookieToken) })
 })
 
+app.get('/api/drive/download-test', async (req, res) => {
+  const fileId = String(req.query.id || '')
+  if (!/^[A-Za-z0-9_-]{10,}$/.test(fileId)) return res.status(400).json({ error: 'Archivo inválido' })
+  try {
+    const accessToken = await getDriveAccessToken(req)
+    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } })
+    if (!response.ok || !response.body) throw new Error('No se pudo descargar el archivo de Google Drive')
+    const data = await response.arrayBuffer()
+    return res.json({ ok: true, fileId, bytes: data.byteLength, contentType: response.headers.get('content-type') || 'application/octet-stream' })
+  } catch (error) {
+    if (error.code === 'DRIVE_AUTH_REQUIRED') return res.status(401).json({ error: 'DRIVE_AUTH_REQUIRED' })
+    console.error(error.message)
+    return res.status(503).json({ error: 'No se pudo probar la descarga de Google Drive' })
+  }
+})
+
 app.get('/api/drive/search', async (req, res) => {
   const query = String(req.query.q || '').trim()
   if (query.length < 2 || query.length > 160) return res.status(400).json({ error: 'Búsqueda inválida' })

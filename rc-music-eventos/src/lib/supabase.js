@@ -38,6 +38,7 @@ export async function signInDj(email, code) {
   if (error) throw error
   const access = Array.isArray(data) ? data[0] : data
   if (!access?.session_token) throw new Error('Access denied')
+  if (access.role !== 'admin' && (!access.plan_expires_at || new Date(access.plan_expires_at).getTime() <= Date.now())) throw new Error('DJ plan expired')
   const session = { token: access.session_token, ...access }
   delete session.session_token
   session.token = access.session_token
@@ -50,7 +51,7 @@ export async function getDjAccess(token = getStoredDjSession()?.token) {
   const { data, error } = await supabase.rpc('dj_check_access', { p_token: token })
   if (error) throw error
   const access = Array.isArray(data) ? data[0] : data
-  if (!access?.is_active) { storeDjSession(null); return null }
+  if (!access?.is_active || (access.role !== 'admin' && (!access.plan_expires_at || new Date(access.plan_expires_at).getTime() <= Date.now()))) { storeDjSession(null); return null }
   return { token, ...access }
 }
 

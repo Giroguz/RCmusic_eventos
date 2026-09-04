@@ -15,12 +15,13 @@ const frontendOrigin = process.env.FRONTEND_ORIGIN || 'https://r-cmusic-eventos.
 const corsOrigin = process.env.CORS_ORIGIN || frontendOrigin
 const driveFolderId = process.env.DRIVE_FOLDER_ID || '1UTIQESYvJcNdKXNsDdDs0dRCrDzs5JvF'
 const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://rcmusic-eventos.onrender.com/api/drive/callback'
-let driveTokenCache = { value: '', expiresAt: 0 }
+const driveTokenCache = new Map()
 let spotifyTokenCache = { value: '', expiresAt: 0 }
-let driveCatalogCache = { files: [], expiresAt: 0 }
+const driveCatalogCache = new Map()
 const oauthStates = new Map()
 const driveSessions = new Map()
 const driveSessionTtl = 60 * 60 * 24 * 30 * 1000
+const driveCookieKey = crypto.createHash('sha256').update(process.env.DRIVE_SESSION_SECRET || process.env.GOOGLE_CLIENT_SECRET || 'rc-drive-session').digest()
 
 app.use(cors({ origin: corsOrigin, credentials: true }))
 app.use(express.json())
@@ -38,7 +39,27 @@ function parseCookies(req) {
 }
 
 function cookie(name, value, maxAge = 60 * 60 * 24 * 30) {
-  return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned`
+  return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`
+}
+
+function encryptDriveRefreshToken(value) {
+  const iv = crypto.randomBytes(12)
+  const cipher = crypto.createCipheriv('aes-256-gcm', driveCookieKey, iv)
+  const ciphertext = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()])
+  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64url')
+}
+
+function decryptDriveRefreshToken(value) {
+  try {
+    const raw = Buffer.from(String(value || ''), 'base64url')
+    if (raw.length < 29) return ''
+    const iv = raw.subarray(0, 12)
+    const authTag = raw.subarray(12, 28)
+    const ciphertext = raw.subarray(28)
+    const decipher = crypto.createDecipheriv('aes-256-gcm', driveCookieKey, iv)
+    decipher.setAuthTag(authTag)
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8')
+  } catch { return '' }
 }
 
 function redirectWithDriveSession(returnTo, sessionId) {
@@ -73,8 +94,8 @@ app.get('/api/drive/callback', async (req, res) => {
     const sessionId = crypto.randomBytes(32).toString('hex')
     driveSessions.set(sessionId, { refreshToken: data.refresh_token, expiresAt: Date.now() + driveSessionTtl })
     setTimeout(() => driveSessions.delete(sessionId), driveSessionTtl)
-    res.setHeader('Set-Cookie', cookie('drive_refresh_token', data.refresh_token))
-    driveCatalogCache = { files: [], expiresAt: 0 }
+    res.setHeader('Set-Cookie', cookie('drive_refresh_token', encryptDriveRefreshToken(data.refresh_token)))
+    driveCatalogCache.clear()
     res.redirect(redirectWithDriveSession(returnTo, sessionId))
   } catch (error) {
     console.error(error.message)
@@ -86,14 +107,21 @@ async function getDriveAccessToken(req) {
   const sessionId = String(req.headers['x-drive-session'] || '')
   const session = sessionId ? driveSessions.get(sessionId) : null
   if (session && session.expiresAt <= Date.now()) driveSessions.delete(sessionId)
-  const refreshToken = session && session.expiresAt > Date.now() ? session.refreshToken : parseCookies(req).drive_refresh_token
+  const cookieValue = parseCookies(req).drive_refresh_token
+  // Prefer the in-memory session, but fall back to the encrypted cookie so a
+  // request routed to another Render instance survives the OAuth callback.
+  const refreshToken = session && session.expiresAt > Date.now() ? session.refreshToken : (decryptDriveRefreshToken(cookieValue) || cookieValue)
   if (!refreshToken) { const error = new Error('DRIVE_AUTH_REQUIRED'); error.code = 'DRIVE_AUTH_REQUIRED'; throw error }
-  if (driveTokenCache.value && driveTokenCache.expiresAt > Date.now() + 30_000) return driveTokenCache.value
+  // Never share an access token between DJs. A viewer session must use the
+  // Google account that owns the corresponding Drive permission.
+  const cacheKey = sessionId || crypto.createHash('sha256').update(refreshToken).digest('hex')
+  const cached = driveTokenCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now() + 30_000) return { accessToken: cached.value, cacheKey }
   const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, refresh_token: refreshToken, grant_type: 'refresh_token' }) })
   const data = await response.json()
   if (!response.ok) { const error = new Error('DRIVE_AUTH_REQUIRED'); error.code = 'DRIVE_AUTH_REQUIRED'; throw error }
-  driveTokenCache = { value: data.access_token, expiresAt: Date.now() + (data.expires_in * 1000) }
-  return driveTokenCache.value
+  driveTokenCache.set(cacheKey, { value: data.access_token, expiresAt: Date.now() + (data.expires_in * 1000) })
+  return { accessToken: data.access_token, cacheKey }
 }
 
 async function driveList(accessToken, query, fields) {
@@ -103,8 +131,9 @@ async function driveList(accessToken, query, fields) {
   return response.json()
 }
 
-async function getDriveCatalog(accessToken) {
-  if (driveCatalogCache.expiresAt > Date.now()) return driveCatalogCache.files
+async function getDriveCatalog(accessToken, cacheKey) {
+  const cached = driveCatalogCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.files
   const folders = [driveFolderId]
   const files = []
   while (folders.length) {
@@ -123,7 +152,7 @@ async function getDriveCatalog(accessToken) {
       pageToken = data.nextPageToken || ''
     } while (pageToken)
   }
-  driveCatalogCache = { files, expiresAt: Date.now() + 5 * 60 * 1000 }
+  driveCatalogCache.set(cacheKey, { files, expiresAt: Date.now() + 5 * 60 * 1000 })
   return files
 }
 
@@ -131,8 +160,8 @@ function normalizeText(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
-async function findDriveFile(accessToken, query) {
-  const files = await getDriveCatalog(accessToken)
+async function findDriveFile(accessToken, query, cacheKey) {
+  const files = await getDriveCatalog(accessToken, cacheKey)
   const wanted = normalizeText(query)
   const words = wanted.split(' ').filter((word) => word.length > 1)
   return files.map((file) => {
@@ -147,14 +176,14 @@ app.get('/api/drive/status', (req, res) => {
   const sessionId = String(req.headers['x-drive-session'] || '')
   const session = sessionId ? driveSessions.get(sessionId) : null
   const cookieToken = parseCookies(req).drive_refresh_token
-  res.json({ authenticated: Boolean((session && session.expiresAt > Date.now()) || cookieToken) })
+  res.json({ authenticated: Boolean((session && session.expiresAt > Date.now()) || decryptDriveRefreshToken(cookieToken) || cookieToken) })
 })
 
 app.get('/api/drive/download-test', async (req, res) => {
   const fileId = String(req.query.id || '')
   if (!/^[A-Za-z0-9_-]{10,}$/.test(fileId)) return res.status(400).json({ error: 'Archivo inválido' })
   try {
-    const accessToken = await getDriveAccessToken(req)
+    const { accessToken } = await getDriveAccessToken(req)
     const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } })
     if (!response.ok || !response.body) throw new Error('No se pudo descargar el archivo de Google Drive')
     const data = await response.arrayBuffer()
@@ -170,8 +199,8 @@ app.get('/api/drive/preview', async (req, res) => {
   const fileId = String(req.query.id || '')
   if (!/^[A-Za-z0-9_-]{10,}$/.test(fileId)) return res.status(400).json({ error: 'Archivo inválido' })
   try {
-    const accessToken = await getDriveAccessToken(req)
-    const files = await getDriveCatalog(accessToken)
+    const { accessToken, cacheKey } = await getDriveAccessToken(req)
+    const files = await getDriveCatalog(accessToken, cacheKey)
     const file = files.find((item) => item.id === fileId)
     if (!file) return res.status(404).json({ error: 'Archivo no encontrado' })
     const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } })
@@ -189,12 +218,12 @@ app.get('/api/drive/search', async (req, res) => {
   const query = String(req.query.q || '').trim()
   if (query.length < 2 || query.length > 160) return res.status(400).json({ error: 'Búsqueda inválida' })
   try {
-    const accessToken = await getDriveAccessToken(req)
-    const files = await getDriveCatalog(accessToken)
+    const { accessToken, cacheKey } = await getDriveAccessToken(req)
+    const files = await getDriveCatalog(accessToken, cacheKey)
     const wanted = normalizeText(query)
     const words = wanted.split(' ').filter((word) => word.length > 1)
     const matches = files.map((file) => {
-      const name = normalizeText(file.name.replace(/\\.[^.]+$/, ''))
+      const name = normalizeText(file.name.replace(/\.[^.]+$/, ''))
       const score = (name.includes(wanted) ? 100 : 0) + words.filter((word) => name.includes(word)).length * 10
       return { file, score }
     }).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score || a.file.name.localeCompare(b.file.name)).slice(0, 20)
@@ -207,8 +236,8 @@ app.get('/api/drive/search', async (req, res) => {
 })
 
 async function streamDriveFile(req, res, query, format) {
-  const accessToken = await getDriveAccessToken(req)
-  const file = await findDriveFile(accessToken, query)
+  const { accessToken, cacheKey } = await getDriveAccessToken(req)
+  const file = await findDriveFile(accessToken, query, cacheKey)
   if (!file) return false
   const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } })
   if (!response.ok || !response.body) throw new Error('No se pudo descargar el archivo de Google Drive')

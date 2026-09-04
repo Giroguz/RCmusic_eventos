@@ -123,6 +123,27 @@ async function findDriveFile(accessToken, query) {
   }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.file.name.localeCompare(b.file.name))[0]?.file || null
 }
 
+app.get('/api/drive/search', async (req, res) => {
+  const query = String(req.query.q || '').trim()
+  if (query.length < 2 || query.length > 160) return res.status(400).json({ error: 'Búsqueda inválida' })
+  try {
+    const accessToken = await getDriveAccessToken(req)
+    const files = await getDriveCatalog(accessToken)
+    const wanted = normalizeText(query)
+    const words = wanted.split(' ').filter((word) => word.length > 1)
+    const matches = files.map((file) => {
+      const name = normalizeText(file.name.replace(/\\.[^.]+$/, ''))
+      const score = (name.includes(wanted) ? 100 : 0) + words.filter((word) => name.includes(word)).length * 10
+      return { file, score }
+    }).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score || a.file.name.localeCompare(b.file.name)).slice(0, 20)
+    return res.json({ query, matches: matches.map(({ file, score }) => ({ id: file.id, name: file.name, mimeType: file.mimeType, size: file.size, score })) })
+  } catch (error) {
+    if (error.code === 'DRIVE_AUTH_REQUIRED') return res.status(401).json({ error: 'DRIVE_AUTH_REQUIRED' })
+    console.error(error.message)
+    return res.status(503).json({ error: 'No se pudo consultar Google Drive' })
+  }
+})
+
 async function streamDriveFile(req, res, query, format) {
   const accessToken = await getDriveAccessToken(req)
   const file = await findDriveFile(accessToken, query)

@@ -7,7 +7,7 @@ export async function downloadYoutubeAudio(videoId, format = 'mp3', fileName = '
     ? { videoId: cleanId, format }
     : { query: String(searchQuery || '').trim(), format }
   if (!body.videoId && !body.query) throw new Error('INVALID_DOWNLOAD_SOURCE')
-  const response = await fetch(`${apiBase}/youtube-download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const response = await fetch(`${apiBase}/youtube-download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body) })
   if (!response.ok) {
     const error = (await response.json().catch(() => null))?.error
     if (response.status === 401 && error === 'DRIVE_AUTH_REQUIRED') {

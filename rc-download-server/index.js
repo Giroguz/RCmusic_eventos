@@ -215,19 +215,29 @@ app.get('/api/drive/preview', async (req, res) => {
   }
 })
 
+async function searchDriveCatalog(accessToken, query) {
+  const wanted = normalizeText(query)
+  const words = wanted.split(' ').filter((word) => word.length >= 3).slice(0, 6)
+  const candidates = new Map()
+  for (const word of words) {
+    const data = await driveList(accessToken, `name contains '${word.replace(/'/g, "\\'")}' and trashed = false`, 'id,name,mimeType,size,parents,modifiedTime')
+    for (const file of data.files || []) {
+      if (file.mimeType?.startsWith('audio/') || /\.(mp3|m4a|wav|aif|aiff|flac|ogg)$/i.test(file.name)) candidates.set(file.id, file)
+    }
+  }
+  return [...candidates.values()].map((file) => {
+    const name = normalizeText(file.name.replace(/\.[^.]+$/, ''))
+    const score = (name.includes(wanted) ? 100 : 0) + words.filter((word) => name.includes(word)).length * 10
+    return { file, score }
+  }).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score || a.file.name.localeCompare(b.file.name)).slice(0, 20)
+}
+
 app.get('/api/drive/search', async (req, res) => {
   const query = String(req.query.q || '').trim()
   if (query.length < 2 || query.length > 160) return res.status(400).json({ error: 'Búsqueda inválida' })
   try {
     const { accessToken, cacheKey } = await getDriveAccessToken(req)
-    const files = await getDriveCatalog(accessToken, cacheKey)
-    const wanted = normalizeText(query)
-    const words = wanted.split(' ').filter((word) => word.length > 1)
-    const matches = files.map((file) => {
-      const name = normalizeText(file.name.replace(/\.[^.]+$/, ''))
-      const score = (name.includes(wanted) ? 100 : 0) + words.filter((word) => name.includes(word)).length * 10
-      return { file, score }
-    }).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score || a.file.name.localeCompare(b.file.name)).slice(0, 20)
+    const matches = await searchDriveCatalog(accessToken, query)
     return res.json({ query, matches: matches.map(({ file, score }) => ({ id: file.id, name: file.name, mimeType: file.mimeType, size: file.size, score })) })
   } catch (error) {
     if (error.code === 'DRIVE_AUTH_REQUIRED') return res.status(401).json({ error: 'DRIVE_AUTH_REQUIRED' })

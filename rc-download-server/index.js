@@ -38,7 +38,7 @@ function parseCookies(req) {
 }
 
 function cookie(name, value, maxAge = 60 * 60 * 24 * 30) {
-  return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`
+  return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned`
 }
 
 function redirectWithDriveSession(returnTo, sessionId) {
@@ -163,6 +163,25 @@ app.get('/api/drive/download-test', async (req, res) => {
     if (error.code === 'DRIVE_AUTH_REQUIRED') return res.status(401).json({ error: 'DRIVE_AUTH_REQUIRED' })
     console.error(error.message)
     return res.status(503).json({ error: 'No se pudo probar la descarga de Google Drive' })
+  }
+})
+
+app.get('/api/drive/preview', async (req, res) => {
+  const fileId = String(req.query.id || '')
+  if (!/^[A-Za-z0-9_-]{10,}$/.test(fileId)) return res.status(400).json({ error: 'Archivo inválido' })
+  try {
+    const accessToken = await getDriveAccessToken(req)
+    const files = await getDriveCatalog(accessToken)
+    const file = files.find((item) => item.id === fileId)
+    if (!file) return res.status(404).json({ error: 'Archivo no encontrado' })
+    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } })
+    if (!response.ok || !response.body) return res.status(503).json({ error: 'No se pudo leer el archivo de Google Drive' })
+    res.status(200).set({ 'Content-Type': response.headers.get('content-type') || 'audio/mpeg', 'Content-Length': response.headers.get('content-length') || undefined, 'Content-Disposition': `inline; filename="${file.name.replace(/["\\r\\n]/g, '')}"`, 'Cache-Control': 'no-store' })
+    return Readable.fromWeb(response.body).pipe(res)
+  } catch (error) {
+    if (error.code === 'DRIVE_AUTH_REQUIRED') return res.status(401).json({ error: 'DRIVE_AUTH_REQUIRED' })
+    console.error(error.message)
+    return res.status(503).json({ error: 'No se pudo leer el archivo de Google Drive' })
   }
 })
 

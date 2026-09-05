@@ -1,90 +1,232 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, Headphones, KeyRound, LoaderCircle, Mail, ShieldCheck, Upload } from 'lucide-react'
-import { Brand, PageContainer } from './Brand'
-import LanguagePicker from './LanguagePicker'
-import { getStoredDjSession, getSubscriptionQr, getSubscriptionYapeNumber, sendEmailVerificationLink, signInDj, startDjTrial, submitSubscriptionProof, supabase, supabaseEnabled } from '../lib/supabase'
-// Yape subscription number is loaded from the admin-controlled settings.
-import { useLanguage } from '../lib/i18n'
-import { PLAN_OPTIONS, planPriceText } from '../lib/plans'
+import { createClient } from '@supabase/supabase-js'
 
-const REGION_CURRENCIES = { PE: 'PEN', US: 'USD', CA: 'CAD', MX: 'MXN', CO: 'COP', CL: 'CLP', BR: 'BRL', AR: 'ARS', ES: 'EUR', GB: 'GBP' }
+const url = import.meta.env.VITE_SUPABASE_URL
+const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-async function proofFileToDataUrl(file) {
-  if (!file || !file.type.startsWith('image/')) throw new Error('invalid-image')
-  const source = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file) })
-  const image = await new Promise((resolve, reject) => { const value = new Image(); value.onload = () => resolve(value); value.onerror = reject; value.src = source })
-  const maxSide = 1000; const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight)); const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(image.naturalWidth * scale)); canvas.height = Math.max(1, Math.round(image.naturalHeight * scale)); canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height)
-  const result = canvas.toDataURL('image/webp', 0.84)
-  if (result.length > 1500000) throw new Error('image-too-large')
-  return result
+export const supabaseEnabled = Boolean(url && anonKey && !String(url).includes('tu-proyecto'))
+export const supabase = supabaseEnabled ? createClient(url, anonKey) : null
+const SESSION_KEY = 'rc_music_dj_session_v1'
+
+export function getStoredDjSession() {
+  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null') } catch { return null }
+}
+function storeDjSession(value) { try { if (value) sessionStorage.setItem(SESSION_KEY, JSON.stringify(value)); else sessionStorage.removeItem(SESSION_KEY) } catch {} }
+
+export async function ensureAnonymousSession() {
+  if (!supabase) return null
+  const { data: existing } = await supabase.auth.getSession()
+  if (existing.session) return existing.session
+  const { data, error } = await supabase.auth.signInAnonymously()
+  if (error) throw error
+  return data.session
 }
 
-function PlanCards({ token }) {
-  const sessionToken = token || getStoredDjSession()?.token
-  const [currency, setCurrency] = useState('PEN')
-  const [rate, setRate] = useState(1)
-  const [subscriptionQr, setSubscriptionQr] = useState('')
-  const [yapeNumber, setYapeNumber] = useState('')
-  const [selectedPlan, setSelectedPlan] = useState('')
-  const [proofImage, setProofImage] = useState('')
-  const [proofName, setProofName] = useState('')
-  const [proofBusy, setProofBusy] = useState(false)
-  const [proofMessage, setProofMessage] = useState('')
-  useEffect(() => {
-    const region = String(navigator.language || '').split('-')[1]?.toUpperCase()
-    const target = REGION_CURRENCIES[region] || 'PEN'
-    if (target === 'PEN') return undefined
-    let active = true
-    fetch('https://open.er-api.com/v6/latest/PEN').then((response) => response.json()).then((data) => {
-      const nextRate = Number(data?.rates?.[target])
-      if (active && Number.isFinite(nextRate) && nextRate > 0) { setCurrency(target); setRate(nextRate) }
-    }).catch(() => {})
-    return () => { active = false }
-  }, [])
-  useEffect(() => { Promise.all([getSubscriptionQr(), getSubscriptionYapeNumber()]).then(([qr, number]) => { setSubscriptionQr(qr); setYapeNumber(number) }).catch(() => {}) }, [])
-  async function selectProof(file) {
-    if (!file) return
-    setProofBusy(true); setProofMessage('')
-    try { setProofImage(await proofFileToDataUrl(file)); setProofName(file.name) } catch { setProofMessage('No se pudo leer la imagen. Usa una foto clara y menor de 1.5 MB.') } finally { setProofBusy(false) }
-  }
-  async function sendProof() {
-    if (!sessionToken) { setProofMessage('Vuelve a ingresar con tu código para enviar el comprobante.'); return }
-    if (!selectedPlan || !proofImage) { setProofMessage('Selecciona un plan y sube la foto del comprobante.'); return }
-    setProofBusy(true); setProofMessage('')
-    try { await submitSubscriptionProof(selectedPlan, proofImage, sessionToken); setProofMessage('Comprobante enviado. El desarrollador revisará el pago y activará tu plan.'); setProofImage('') } catch { setProofMessage('No se pudo enviar el comprobante. Inténtalo nuevamente.') } finally { setProofBusy(false) }
-  }
-  return <div className="mt-4"><p className="mb-2 text-[11px] text-white/45">Precios base en Perú · conversión orientativa según la región del navegador</p>{subscriptionQr && <div className="mb-3 flex items-center gap-3 rounded-xl bg-white p-3 text-left text-ink"><img src={subscriptionQr} alt="QR de Yape para suscripciones" className="h-24 w-24 rounded-lg object-contain" /><div><strong className="block text-sm">Paga con Yape</strong>{yapeNumber && <span className="mt-1 block text-xs font-bold text-ink/75">Número: {yapeNumber}</span>}<span className="mt-1 block text-xs text-ink/60">Escanea el QR o usa el número y luego sube aquí tu comprobante.</span></div></div>}<div className="grid gap-2 sm:grid-cols-3">{PLAN_OPTIONS.map((plan) => <button type="button" key={plan.id} onClick={() => { setSelectedPlan(plan.id); setProofMessage('') }} className={`rounded-xl border p-3 text-center transition ${selectedPlan === plan.id ? 'border-turquoise bg-turquoise/20' : 'border-turquoise/25 bg-turquoise/10 hover:border-turquoise/60'}`}><strong className="block text-sm text-turquoise">{plan.label}</strong><span className="mt-1 block text-xs text-white/70">{planPriceText(plan, currency, rate)}</span></button>)}</div><div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-xs font-bold text-white/75">{selectedPlan ? `Plan elegido: ${PLAN_OPTIONS.find((plan) => plan.id === selectedPlan)?.label}` : '1. Elige el plan que pagaste'}</p><label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-turquoise/30 bg-turquoise/10 px-3 py-2.5 text-xs font-bold text-turquoise hover:bg-turquoise/15"><Upload size={15} />{proofBusy ? 'Procesando…' : '2. Subir comprobante'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={proofBusy} onChange={(e) => { selectProof(e.target.files?.[0]); e.target.value = '' }} className="sr-only" /></label>{proofName && <span className="ml-2 text-xs text-white/50">{proofName}</span>}{proofImage && <img src={proofImage} alt="Vista previa del comprobante" className="mt-3 max-h-40 w-full rounded-lg bg-white object-contain p-1" />}<button type="button" onClick={sendProof} disabled={proofBusy || !proofImage || !selectedPlan} className="btn-primary mt-3 w-full disabled:cursor-not-allowed disabled:opacity-40">{proofBusy ? <LoaderCircle size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}3. Enviar comprobante</button>{proofMessage && <p className="mt-2 text-xs leading-5 text-turquoise">{proofMessage}</p>}</div></div>
+// DJ access is deliberately not backed by a shared frontend password. The RPC validates
+// a per-DJ code server-side and returns a short-lived, revocable session token.
+export async function sendEmailVerificationLink(email) {
+  if (!supabase) throw new Error('Supabase is not configured')
+  const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: true, emailRedirectTo: window.location.origin } })
+  if (error) throw error
 }
 
-export default function DjLogin({ onLogin, onBack }) {
-  const { t, language } = useLanguage(); const [email, setEmail] = useState(''); const [code, setCode] = useState(''); const [show, setShow] = useState(false); const [error, setError] = useState(''); const [planExpired, setPlanExpired] = useState(false); const [expiredSession, setExpiredSession] = useState(null); const [showTrial, setShowTrial] = useState(false); const [trialName, setTrialName] = useState(''); const [trialEmail, setTrialEmail] = useState(''); const [trialCode, setTrialCode] = useState(''); const [trialError, setTrialError] = useState('')
-  async function requestTrial(e) {
-    e.preventDefault(); setTrialError('')
-    try { if (!supabaseEnabled) throw new Error('SUPABASE_REQUIRED'); sessionStorage.setItem('rc_pending_trial_v1', JSON.stringify({ email: trialEmail.trim().toLowerCase(), displayName: trialName.trim() })); await sendEmailVerificationLink(trialEmail); setTrialError('Te enviamos un enlace de verificación. Ábrelo en tu correo y vuelve a esta página para generar tu demo.') }
-    catch (err) { setTrialError(err?.message === 'SUPABASE_REQUIRED' ? t('supabaseRequired') : t('trialUnavailable')) }
-  }
+export async function startDjTrial(email, displayName) {
+  if (!supabase) throw new Error('Supabase is not configured')
+  const { data, error } = await supabase.rpc('dj_start_trial', { p_email: email.trim().toLowerCase(), p_display_name: displayName.trim() })
+  if (error) throw error
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row?.generated_code) throw new Error('Trial unavailable')
+  return row
+}
 
-  useEffect(() => {
-    if (!supabase) return undefined
-    let active = true
-    const finishVerifiedTrial = async (session) => {
-      try {
-        const pending = JSON.parse(sessionStorage.getItem('rc_pending_trial_v1') || 'null')
-        if (!pending || !session?.user?.email || session.user.email.toLowerCase() !== pending.email || !session.user.email_confirmed_at) return
-        const result = await startDjTrial(pending.email, pending.displayName)
-        if (!active) return
-        sessionStorage.removeItem('rc_pending_trial_v1'); setTrialCode(result.generated_code); setEmail(pending.email); setCode(result.generated_code); setTrialError('Correo verificado. Tu demo está lista.')
-      } catch {}
+export async function signInDj(email, code) {
+  if (!supabase) throw new Error('Supabase is not configured')
+  const { data, error } = await supabase.rpc('dj_login', { p_email: email.trim().toLowerCase(), p_code: code })
+  if (error) throw error
+  const access = Array.isArray(data) ? data[0] : data
+  if (!access?.session_token) throw new Error('Access denied')
+  const session = { token: access.session_token, ...access }
+  delete session.session_token
+  session.token = access.session_token
+  if (access.role !== 'admin' && (!access.plan_expires_at || new Date(access.plan_expires_at).getTime() <= Date.now())) {
+    // Keep the short-lived DJ session available so the renewal form can submit a proof.
+    storeDjSession(session)
+    const expired = new Error('DJ plan expired')
+    expired.access = session
+    throw expired
+  }
+  storeDjSession(session)
+  return session
+}
+
+export async function getDjAccess(token = getStoredDjSession()?.token) {
+  if (!supabase || !token) return null
+  const { data, error } = await supabase.rpc('dj_check_access', { p_token: token })
+  if (error) throw error
+  const access = Array.isArray(data) ? data[0] : data
+  if (!access?.is_active) { storeDjSession(null); return null }
+  return { token, ...access }
+}
+
+export async function signOutDj(token = getStoredDjSession()?.token) {
+  if (supabase && token) await supabase.rpc('dj_logout', { p_token: token }).catch(() => {})
+  storeDjSession(null)
+}
+
+function mapRequest(row) {
+  const rawVideoId = String(row.video_id || ''); const source = rawVideoId.match(/^(spotify|deezer|soundcloud):/)?.[1] || 'youtube'; const videoId = rawVideoId.replace(/^(spotify|deezer|soundcloud):/, ''); const externalUrl = source === 'deezer' ? `https://www.deezer.com/track/${videoId}` : source === 'soundcloud' ? `https://soundcloud.com/search/sounds?q=${encodeURIComponent(`${row.title} ${row.artist}`)}` : ''; return { id: row.id, title: row.title, artist: row.artist, videoId, source, spotifyId: videoId, externalUrl, thumbnail: row.thumbnail, requester: row.requester, dedication: row.dedication || '', paymentProof: row.payment_proof || '', likes: row.likes || 0, status: row.status, createdAt: row.created_at }
+}
+export function mapEvent(row, requests = []) {
+  return { id: row.id, code: row.code, name: row.name, djName: row.dj_name, contact: row.contact || '', yapeNumber: row.yape_number || '', thankYou: row.thank_you || '', qrImage: row.qr_image_url || '', tipsRequired: Boolean(row.tips_required), finalized: Boolean(row.finalized_at || row.finalized), finalizedAt: row.finalized_at || null, createdAt: row.created_at, requests: requests.map(mapRequest) }
+}
+
+export async function getPublicEvent(query) {
+  if (!supabase) return null
+  await ensureAnonymousSession()
+  const normalized = query.trim().toUpperCase()
+  const { data: event, error } = await supabase.from('events').select('*').eq('code', normalized).maybeSingle()
+  if (error) throw error
+  if (!event) return null
+  const { data: requests, error: requestsError } = await supabase.from('song_requests').select('id,video_id,title,artist,thumbnail,requester,dedication,likes,status,created_at').eq('event_id', event.id).order('likes', { ascending: false })
+  if (requestsError) throw requestsError
+  return mapEvent(event, requests || [])
+}
+
+export async function getDjEvents(token = getStoredDjSession()?.token) {
+  if (!supabase || !token) return []
+  const { data, error } = await supabase.rpc('dj_get_events', { p_token: token })
+  if (error) throw error
+  return (data || []).map((row) => mapEvent(row, row.requests || []))
+}
+
+export async function createDjEvent(input, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) throw new Error('DJ session required')
+  const { data, error } = await supabase.rpc('dj_create_event', { p_token: token, p_code: input.code, p_name: input.name, p_dj_name: input.djName, p_contact: input.contact, p_yape_number: input.yapeNumber, p_thank_you: input.thankYou })
+  if (error) throw error
+  return mapEvent(Array.isArray(data) ? data[0] : data, [])
+}
+
+export async function updateDjEventInfo(eventId, input, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) throw new Error('DJ session required')
+  const { data, error } = await supabase.rpc('dj_update_event_info', { p_token: token, p_event_id: eventId, p_dj_name: input.djName, p_yape_number: input.yapeNumber, p_contact: input.contact })
+  if (error) throw error
+  return mapEvent(Array.isArray(data) ? data[0] : data, [])
+}
+
+export async function updateDjEventQr(eventId, qrImage, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) throw new Error('DJ session required')
+  const { data, error } = await supabase.rpc('dj_update_event_qr', { p_token: token, p_event_id: eventId, p_qr_image: qrImage || null })
+  if (error) throw error
+  return data
+}
+
+export async function updateDjEventTipSettings(eventId, tipsRequired, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) throw new Error('DJ session required')
+  const { data, error } = await supabase.rpc('dj_update_event_tip_settings', { p_token: token, p_event_id: eventId, p_tips_required: Boolean(tipsRequired) })
+  if (error) throw error
+  return Boolean(data)
+}
+
+export async function getDjEventQr(eventId, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) return ''
+  const { data, error } = await supabase.rpc('dj_get_event_qr', { p_token: token, p_event_id: eventId })
+  if (error) throw error
+  return data || ''
+}
+
+export async function finalizeDjEvent(eventId, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) throw new Error('DJ session required')
+  const { data, error } = await supabase.rpc('dj_finalize_event', { p_token: token, p_event_id: eventId })
+  if (error) throw error
+  try {
+    const channel = supabase.channel(`event-chat-${eventId}`)
+    await new Promise((resolve) => channel.subscribe(() => resolve()))
+    await channel.send({ type: 'broadcast', event: 'event_finalized', payload: { eventId } })
+    await supabase.removeChannel(channel)
+  } catch {}
+  return data
+}
+
+export async function addSongRequest(eventId, song, form) {
+  const { data, error } = await supabase.rpc('submit_song_request', { p_event_id: eventId, p_video_id: song.source === 'youtube' ? song.id : `${song.source}:${song.id}`, p_title: song.title, p_artist: song.artist, p_thumbnail: song.thumbnail, p_requester: form.requester || 'Anónimo', p_dedication: form.dedication || null, p_payment_proof: form.paymentProof || null })
+  if (error) throw error
+  return mapRequest(Array.isArray(data) ? data[0] : data)
+}
+export async function likeSongRequest(requestId) { const { error } = await supabase.rpc('like_request', { request_uuid: requestId }); if (error) throw error }
+export async function setRequestStatus(requestId, status, token = getStoredDjSession()?.token) {
+  if (status === 'not-found' || status === 'pending') {
+    const { error } = await supabase.rpc('dj_set_request_not_found', { p_token: token, p_request_id: requestId, p_not_found: status === 'not-found' })
+    if (!error) return
+  }
+  const { error } = await supabase.rpc('dj_set_request_status', { p_token: token, p_request_id: requestId, p_status: status })
+  if (error) throw error
+}
+
+function account(row) { return { id: row.id, email: row.email, displayName: row.display_name, role: row.role, approved: row.approved, blocked: row.blocked, planType: row.plan_type, planStartedAt: row.plan_started_at, planExpiresAt: row.plan_expires_at, daysUsed: row.days_used, daysRemaining: row.days_remaining, isActive: row.is_active, generatedCode: row.generated_code } }
+export async function adminListDjs(token) { const { data, error } = await supabase.rpc('admin_list_djs', { p_token: token }); if (error) throw error; return (data || []).map(account) }
+export async function adminCreateDj(input, token) { const { data, error } = await supabase.rpc('admin_create_dj', { p_token: token, p_email: input.email, p_display_name: input.displayName, p_plan_type: input.planType || 'monthly' }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
+export async function adminSetDjState(id, state, token) { const { data, error } = await supabase.rpc('admin_set_dj_state', { p_token: token, p_dj_id: id, p_approved: state.approved, p_blocked: state.blocked }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
+export async function adminSetDjPlan(id, planType, token) { const { data, error } = await supabase.rpc('admin_set_dj_plan', { p_token: token, p_dj_id: id, p_plan_type: planType }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
+export async function adminRegenerateCode(id, token) { const { data, error } = await supabase.rpc('admin_regenerate_code', { p_token: token, p_dj_id: id }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
+export async function adminGetSubscriptionQr(token) { if (!supabase || !token) return ''; const { data, error } = await supabase.rpc('admin_get_subscription_qr', { p_token: token }); if (error) throw error; return data || '' }
+export async function adminSetSubscriptionQr(qrImage, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_set_subscription_qr', { p_token: token, p_qr_image: qrImage || null }); if (error) throw error; return data || '' }
+export async function adminGetSubscriptionYapeNumber(token) { if (!supabase || !token) return ''; const { data, error } = await supabase.rpc('admin_get_subscription_yape_number', { p_token: token }); if (error) throw error; return data || '' }
+export async function adminSetSubscriptionYapeNumber(yapeNumber, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_set_subscription_yape_number', { p_token: token, p_yape_number: yapeNumber || null }); if (error) throw error; return data || '' }
+export async function getSubscriptionQr() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_qr'); if (error) return ''; return data || '' }
+export async function getSubscriptionYapeNumber() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_yape_number'); if (error) return ''; return data || '' }
+export async function submitSubscriptionProof(planType, proofImage, token) { if (!supabase || !token) throw new Error('DJ session required'); const { data, error } = await supabase.rpc('submit_subscription_proof', { p_token: token, p_plan_type: planType, p_proof_image: proofImage }); if (error) throw error; return data }
+export async function adminListSubscriptionProofs(token) { if (!supabase || !token) return []; const { data, error } = await supabase.rpc('admin_list_subscription_proofs', { p_token: token }); if (error) throw error; return data || [] }
+export async function adminReviewSubscriptionProof(id, status, notes, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_review_subscription_proof', { p_token: token, p_proof_id: id, p_status: status, p_notes: notes || null }); if (error) throw error; return Array.isArray(data) ? data[0] : data }
+
+export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}, scope = 'event') {
+  if (!supabase || !eventId) return () => {}
+  const presenceKey = `${role}-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)}`
+  const channel = supabase.channel(`event-presence-${scope}-${eventId}`, { config: { broadcast: { self: false }, presence: { key: presenceKey } } })
+  const broadcastSeen = new Map()
+  let heartbeatTimer
+  let refreshTimer
+  const countAttendees = () => {
+    const state = channel.presenceState()
+    const attendees = Object.values(state).flatMap((metas) => Array.isArray(metas) ? metas : [metas]).filter((presence) => presence?.role === 'attendee')
+    const attendeeIds = new Set(attendees.map((presence) => presence.clientId || `${presence.role}-${presence.joinedAt || JSON.stringify(presence)}`))
+    const cutoff = Date.now() - 15000
+    for (const [clientId, timestamp] of broadcastSeen) {
+      if (timestamp < cutoff) broadcastSeen.delete(clientId)
+      else attendeeIds.add(clientId)
     }
-    supabase.auth.getSession().then(({ data }) => finishVerifiedTrial(data.session)).catch(() => {})
-    const { data } = supabase.auth.onAuthStateChange((_, session) => { finishVerifiedTrial(session) })
-    return () => { active = false; data.subscription.unsubscribe() }
-  }, [])
-
-  async function submit(e) {
-    e.preventDefault(); setError(''); setPlanExpired(false); setExpiredSession(null)
-    try { if (!supabaseEnabled) throw new Error('SUPABASE_REQUIRED'); onLogin(await signInDj(email, code)) }
-    catch (err) { const message = String(err?.message || '').toLowerCase(); const expired = message.includes('plan expired') || message.includes('plan venc'); const access = expired ? err?.access || null : null; if (access) { try { sessionStorage.setItem('rc_music_dj_session_v1', JSON.stringify(access)) } catch {} } setPlanExpired(expired); setExpiredSession(access); setError(err?.message === 'SUPABASE_REQUIRED' ? t('supabaseRequired') : expired ? t('planExpired') : t('loginError')) }
+    callback(attendeeIds.size)
   }
-  return <div className="party-page min-h-screen bg-ink bg-grid"><PageContainer className="flex min-h-screen flex-col"><div className="flex items-center justify-between"><Brand /><div className="flex items-center gap-2"><LanguagePicker /><button onClick={onBack} className="btn-secondary shrink-0 p-2.5" aria-label={t('back')} title={t('back')}><ArrowLeft size={18} /></button></div></div><div className="flex flex-1 items-center justify-center py-14"><div className="w-full max-w-md"><div className="mb-8 text-center"><div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-3xl bg-violet/20 text-violet-200"><Headphones size={30} /></div><p className="eyebrow text-violet-200">{t('djAccess')}</p><h1 className="mt-3 font-display text-4xl font-bold tracking-tight sm:text-5xl">{t('djHeading')}</h1><p className="mt-4 text-sm leading-6 text-white/55">{t('djDescription')}</p></div><form onSubmit={submit} className="glass rounded-[2rem] p-5 sm:p-7"><label className="mb-2 block text-sm font-semibold text-white/75">{t('email')}</label><div className="relative"><Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/35" /><input autoFocus required type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); setPlanExpired(false) }} className="input-dark pl-11" placeholder={t('emailPlaceholder')} autoComplete="username" /></div><label className="mb-2 mt-4 block text-sm font-semibold text-white/75">{t('accessCode')}</label><div className="relative"><KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/35" /><input required type={show ? 'text' : 'password'} value={code} onChange={(e) => { setCode(e.target.value); setError(''); setPlanExpired(false) }} className="input-dark pl-11 pr-12" placeholder="Código personal" autoComplete="one-time-code" /><button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-white/35 hover:text-white" aria-label={show ? 'Ocultar código' : 'Mostrar código'}>{show ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>{error && <div className="mt-3 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200"><p>{error}</p>{planExpired && <><p className="mt-3 font-semibold text-white/80">Elige el plan que deseas contratar:</p><PlanCards token={expiredSession?.token} /></>}</div>}<button className="btn-primary mt-5 w-full">{t('enter')} <ArrowRight size={18} /></button><div className="mt-5 flex items-center gap-2 text-xs text-white/35"><ShieldCheck size={14} className="text-violet-300" /> {t('codeHint')}</div></form><button type="button" onClick={() => { setShowTrial(true); setTrialError(''); setTrialCode('') }} className="mt-4 w-full rounded-xl border border-turquoise/30 bg-turquoise/10 px-4 py-3 text-sm font-bold text-turquoise hover:bg-turquoise/15">{language === 'en' ? 'Try free demo · 1 day' : 'Probar demo gratis · 1 día'}</button></div></div>{showTrial && <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4 backdrop-blur-sm" onMouseDown={() => setShowTrial(false)}><div className="glass w-full max-w-md rounded-[2rem] p-6" onMouseDown={(e) => e.stopPropagation()}><h2 className="font-display text-2xl font-bold">{t('demoTitle')}</h2><p className="mt-2 text-sm leading-6 text-white/55">{language === 'en' ? 'Generate a trial code valid for 1 day. After that it expires until your account is approved or you choose a plan.' : 'Genera un código de prueba válido durante 1 día. Después quedará obsoleto hasta que se autorice tu cuenta o contrates un plan.'}</p>{trialCode ? <div className="mt-5 rounded-2xl border border-turquoise/30 bg-turquoise/10 p-4 text-center"><p className="text-xs text-white/55">{t('demoCodeLabel')}</p><p className="mt-2 font-mono text-3xl font-bold tracking-[.18em] text-turquoise">{trialCode}</p><p className="mt-3 text-xs text-white/55">{language === 'en' ? 'Valid for 1 day and shown only once.' : 'Válido por 1 día y se muestra una sola vez.'}</p><button type="button" onClick={() => setShowTrial(false)} className="btn-primary mt-4 w-full">{t('useDemoCode')}</button></div> : <form onSubmit={requestTrial} className="mt-5 space-y-3"><input required value={trialName} onChange={(e) => setTrialName(e.target.value)} className="input-dark" placeholder={t('demoNamePlaceholder')} /><input required type="email" value={trialEmail} onChange={(e) => setTrialEmail(e.target.value)} className="input-dark" placeholder={t('emailPlaceholder')} />{trialError && <p className="rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">{trialError}</p>}<button className="btn-primary w-full">{t('generateDemoCode')}</button></form>}</div></div>}</PageContainer></div>
+  const sendHeartbeat = () => {
+    channel.send({ type: 'broadcast', event: 'attendee_presence', payload: { role, clientId: presenceKey, timestamp: Date.now() } }).catch(() => {})
+  }
+  const reset = () => callback(0)
+  channel.on('presence', { event: 'sync' }, countAttendees)
+    .on('presence', { event: 'join' }, countAttendees)
+    .on('presence', { event: 'leave' }, countAttendees)
+    .on('broadcast', { event: 'attendee_presence' }, ({ payload }) => {
+      if (payload?.role === 'attendee' && payload.clientId) {
+        broadcastSeen.set(payload.clientId, Number(payload.timestamp) || Date.now())
+        countAttendees()
+      }
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        try {
+          await channel.track({ role, clientId: presenceKey, joinedAt: Date.now() })
+          sendHeartbeat()
+          countAttendees()
+          heartbeatTimer = setInterval(sendHeartbeat, 5000)
+          refreshTimer = setInterval(countAttendees, 3000)
+        } catch { reset() }
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') reset()
+    })
+  return () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer)
+    if (refreshTimer) clearInterval(refreshTimer)
+    supabase.removeChannel(channel)
+  }
+}
+export function subscribeToEvent(eventId, callback) {
+  if (!supabase) return () => {}
+  const channel = supabase.channel(`event-${eventId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'song_requests', filter: `event_id=eq.${eventId}` }, callback).subscribe()
+  return () => { supabase.removeChannel(channel) }
 }

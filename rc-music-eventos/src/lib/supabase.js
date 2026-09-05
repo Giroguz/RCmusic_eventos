@@ -153,25 +153,51 @@ export async function adminRegenerateCode(id, token) { const { data, error } = a
 export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}) {
   if (!supabase || !eventId) return () => {}
   const presenceKey = `${role}-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)}`
-  const channel = supabase.channel(`event-presence-${eventId}`, { config: { presence: { key: presenceKey } } })
-  const update = () => {
+  const channel = supabase.channel(`event-presence-${eventId}`, { config: { broadcast: { self: false }, presence: { key: presenceKey } } })
+  const broadcastSeen = new Map()
+  let heartbeatTimer
+  let refreshTimer
+  const countAttendees = () => {
     const state = channel.presenceState()
     const attendees = Object.values(state).flatMap((metas) => Array.isArray(metas) ? metas : [metas]).filter((presence) => presence?.role === 'attendee')
     const attendeeIds = new Set(attendees.map((presence) => presence.clientId || `${presence.role}-${presence.joinedAt || JSON.stringify(presence)}`))
+    const cutoff = Date.now() - 15000
+    for (const [clientId, timestamp] of broadcastSeen) {
+      if (timestamp < cutoff) broadcastSeen.delete(clientId)
+      else attendeeIds.add(clientId)
+    }
     callback(attendeeIds.size)
   }
+  const sendHeartbeat = () => {
+    channel.send({ type: 'broadcast', event: 'attendee_presence', payload: { role, clientId: presenceKey, timestamp: Date.now() } }).catch(() => {})
+  }
   const reset = () => callback(0)
-  channel.on('presence', { event: 'sync' }, update).on('presence', { event: 'join' }, update).on('presence', { event: 'leave' }, update).subscribe(async (status) => {
-    if (status === 'SUBSCRIBED') {
-      try {
-        await channel.track({ role, clientId: presenceKey, joinedAt: Date.now() })
-        update()
-      } catch { reset() }
-    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') reset()
-  })
-  return () => { supabase.removeChannel(channel) }
+  channel.on('presence', { event: 'sync' }, countAttendees)
+    .on('presence', { event: 'join' }, countAttendees)
+    .on('presence', { event: 'leave' }, countAttendees)
+    .on('broadcast', { event: 'attendee_presence' }, ({ payload }) => {
+      if (payload?.role === 'attendee' && payload.clientId) {
+        broadcastSeen.set(payload.clientId, Number(payload.timestamp) || Date.now())
+        countAttendees()
+      }
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        try {
+          await channel.track({ role, clientId: presenceKey, joinedAt: Date.now() })
+          sendHeartbeat()
+          countAttendees()
+          heartbeatTimer = setInterval(sendHeartbeat, 5000)
+          refreshTimer = setInterval(countAttendees, 3000)
+        } catch { reset() }
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') reset()
+    })
+  return () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer)
+    if (refreshTimer) clearInterval(refreshTimer)
+    supabase.removeChannel(channel)
+  }
 }
-
 export function subscribeToEvent(eventId, callback) {
   if (!supabase) return () => {}
   const channel = supabase.channel(`event-${eventId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'song_requests', filter: `event_id=eq.${eventId}` }, callback).subscribe()

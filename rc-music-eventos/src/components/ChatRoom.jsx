@@ -13,7 +13,7 @@ export default function ChatRoom({ eventId, role = 'attendee', onClose }) {
   const [online, setOnline] = useState(0)
   const [showEmojis, setShowEmojis] = useState(false)
   const [nameConfirmed, setNameConfirmed] = useState(role === 'dj')
-  useEffect(() => subscribeToEventPresence(eventId, role, setOnline), [eventId, role])
+  useEffect(() => subscribeToEventPresence(eventId, role, setOnline, 'chat'), [eventId, role])
   useEffect(() => {
     const body = document.body
     const previousOverflow = body.style.overflow

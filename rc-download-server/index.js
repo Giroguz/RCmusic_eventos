@@ -133,29 +133,74 @@ async function driveList(accessToken, query, fields) {
   return response.json()
 }
 
-async function getDriveCatalog(accessToken, cacheKey) {
-  const cached = driveCatalogCache.get(cacheKey)
-  if (cached && cached.expiresAt > Date.now()) return cached.files
+async function listDriveFolder(accessToken, parent) {
+  const files = []
+  let pageToken = ''
+  do {
+    const params = new URLSearchParams({ q: `'${parent}' in parents and trashed = false`, fields: 'nextPageToken,files(id,name,mimeType,size,parents,modifiedTime)', pageSize: '1000', orderBy: 'name' })
+    if (pageToken) params.set('pageToken', pageToken)
+    const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+    if (!response.ok) throw new Error('No se pudo leer la carpeta de Google Drive')
+    const data = await response.json()
+    files.push(...(data.files || []))
+    pageToken = data.nextPageToken || ''
+  } while (pageToken)
+  return files
+}
+
+async function buildDriveCatalog(accessToken) {
   const folders = [driveFolderId]
   const files = []
+  // Read several subfolders at once. A sequential crawl made the first
+  // search needlessly slow when the DJ library contained many folders.
   while (folders.length) {
-    const parent = folders.shift()
-    let pageToken = ''
-    do {
-      const params = new URLSearchParams({ q: `'${parent}' in parents and trashed = false`, fields: `nextPageToken,files(id,name,mimeType,size,parents,modifiedTime)`, pageSize: '1000', orderBy: 'name' })
-      if (pageToken) params.set('pageToken', pageToken)
-      const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, { headers: { Authorization: `Bearer ${accessToken}` } })
-      if (!response.ok) throw new Error('No se pudo leer la carpeta de Google Drive')
-      const data = await response.json()
-      for (const file of data.files || []) {
+    const batch = folders.splice(0, 8)
+    const results = await Promise.all(batch.map((parent) => listDriveFolder(accessToken, parent)))
+    for (const children of results) {
+      for (const file of children) {
         if (file.mimeType === 'application/vnd.google-apps.folder') folders.push(file.id)
         else if (file.mimeType?.startsWith('audio/') || /\.(mp3|m4a|wav|aif|aiff|flac|ogg)$/i.test(file.name)) files.push(file)
       }
-      pageToken = data.nextPageToken || ''
-    } while (pageToken)
+    }
   }
-  driveCatalogCache.set(cacheKey, { files, expiresAt: Date.now() + 5 * 60 * 1000 })
   return files
+}
+
+const catalogRefreshes = new Map()
+
+async function getDriveCatalog(accessToken, cacheKey) {
+  const cached = driveCatalogCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.files
+
+  // Once a catalog exists, return it immediately while refreshing it in the
+  // background. This avoids a second long pause after the five-minute TTL.
+  if (cached) {
+    if (!catalogRefreshes.has(cacheKey)) {
+      const refresh = buildDriveCatalog(accessToken)
+        .then((files) => {
+          driveCatalogCache.set(cacheKey, { files, expiresAt: Date.now() + 5 * 60 * 1000 })
+          return files
+        })
+        .catch((error) => {
+          console.error(error.message)
+          return cached.files
+        })
+        .finally(() => catalogRefreshes.delete(cacheKey))
+      catalogRefreshes.set(cacheKey, refresh)
+    }
+    return cached.files
+  }
+
+  if (!catalogRefreshes.has(cacheKey)) {
+    const refresh = buildDriveCatalog(accessToken)
+      .then((files) => {
+        driveCatalogCache.set(cacheKey, { files, expiresAt: Date.now() + 5 * 60 * 1000 })
+        return files
+      })
+      .finally(() => catalogRefreshes.delete(cacheKey))
+    catalogRefreshes.set(cacheKey, refresh)
+  }
+  return catalogRefreshes.get(cacheKey)
 }
 
 function normalizeText(value) {

@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Eye, EyeOff, Headphones, KeyRound, Mail, ShieldC
 import { Brand, PageContainer } from './Brand'
 import LanguagePicker from './LanguagePicker'
 import { getSubscriptionQr, getSubscriptionYapeNumber, signInDj, startDjTrial, supabaseEnabled } from '../lib/supabase'
+// Yape subscription number is loaded from the admin-controlled settings.
 import { useLanguage } from '../lib/i18n'
 import { PLAN_OPTIONS, planPriceText } from '../lib/plans'
 

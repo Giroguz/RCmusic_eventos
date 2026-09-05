@@ -152,17 +152,22 @@ export async function adminRegenerateCode(id, token) { const { data, error } = a
 
 export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}) {
   if (!supabase || !eventId) return () => {}
-  const channel = supabase.channel(`event-presence-${eventId}`)
+  const presenceKey = `${role}-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)}`
+  const channel = supabase.channel(`event-presence-${eventId}`, { config: { presence: { key: presenceKey } } })
   const update = () => {
     const state = channel.presenceState()
-    const attendees = Object.values(state).flat().filter((presence) => presence?.role === 'attendee')
-    callback(new Set(attendees.map((presence) => presence.clientId || presence.joinedAt || JSON.stringify(presence))).size)
+    const attendees = Object.values(state).flatMap((metas) => Array.isArray(metas) ? metas : [metas]).filter((presence) => presence?.role === 'attendee')
+    const attendeeIds = new Set(attendees.map((presence) => presence.clientId || `${presence.role}-${presence.joinedAt || JSON.stringify(presence)}`))
+    callback(attendeeIds.size)
   }
+  const reset = () => callback(0)
   channel.on('presence', { event: 'sync' }, update).on('presence', { event: 'join' }, update).on('presence', { event: 'leave' }, update).subscribe(async (status) => {
     if (status === 'SUBSCRIBED') {
-      await channel.track({ role, clientId: `${role}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`, joinedAt: Date.now() })
-      update()
-    }
+      try {
+        await channel.track({ role, clientId: presenceKey, joinedAt: Date.now() })
+        update()
+      } catch { reset() }
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') reset()
   })
   return () => { supabase.removeChannel(channel) }
 }

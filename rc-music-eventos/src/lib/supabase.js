@@ -125,6 +125,12 @@ export async function finalizeDjEvent(eventId, token = getStoredDjSession()?.tok
   if (!supabase || !token) throw new Error('DJ session required')
   const { data, error } = await supabase.rpc('dj_finalize_event', { p_token: token, p_event_id: eventId })
   if (error) throw error
+  try {
+    const channel = supabase.channel(`event-chat-${eventId}`)
+    await new Promise((resolve) => channel.subscribe(() => resolve()))
+    await channel.send({ type: 'broadcast', event: 'event_finalized', payload: { eventId } })
+    await supabase.removeChannel(channel)
+  } catch {}
   return data
 }
 

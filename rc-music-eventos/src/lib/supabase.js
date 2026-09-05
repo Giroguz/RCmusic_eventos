@@ -38,10 +38,14 @@ export async function signInDj(email, code) {
   if (error) throw error
   const access = Array.isArray(data) ? data[0] : data
   if (!access?.session_token) throw new Error('Access denied')
-  if (access.role !== 'admin' && (!access.plan_expires_at || new Date(access.plan_expires_at).getTime() <= Date.now())) throw new Error('DJ plan expired')
   const session = { token: access.session_token, ...access }
   delete session.session_token
   session.token = access.session_token
+  if (access.role !== 'admin' && (!access.plan_expires_at || new Date(access.plan_expires_at).getTime() <= Date.now())) {
+    const expired = new Error('DJ plan expired')
+    expired.access = session
+    throw expired
+  }
   storeDjSession(session)
   return session
 }
@@ -161,6 +165,9 @@ export async function adminGetSubscriptionYapeNumber(token) { if (!supabase || !
 export async function adminSetSubscriptionYapeNumber(yapeNumber, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_set_subscription_yape_number', { p_token: token, p_yape_number: yapeNumber || null }); if (error) throw error; return data || '' }
 export async function getSubscriptionQr() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_qr'); if (error) return ''; return data || '' }
 export async function getSubscriptionYapeNumber() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_yape_number'); if (error) return ''; return data || '' }
+export async function submitSubscriptionProof(planType, proofImage, token) { if (!supabase || !token) throw new Error('DJ session required'); const { data, error } = await supabase.rpc('submit_subscription_proof', { p_token: token, p_plan_type: planType, p_proof_image: proofImage }); if (error) throw error; return data }
+export async function adminListSubscriptionProofs(token) { if (!supabase || !token) return []; const { data, error } = await supabase.rpc('admin_list_subscription_proofs', { p_token: token }); if (error) throw error; return data || [] }
+export async function adminReviewSubscriptionProof(id, status, notes, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_review_subscription_proof', { p_token: token, p_proof_id: id, p_status: status, p_notes: notes || null }); if (error) throw error; return Array.isArray(data) ? data[0] : data }
 
 export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}, scope = 'event') {
   if (!supabase || !eventId) return () => {}

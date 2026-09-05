@@ -157,7 +157,10 @@ export async function adminSetDjPlan(id, planType, token) { const { data, error 
 export async function adminRegenerateCode(id, token) { const { data, error } = await supabase.rpc('admin_regenerate_code', { p_token: token, p_dj_id: id }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminGetSubscriptionQr(token) { if (!supabase || !token) return ''; const { data, error } = await supabase.rpc('admin_get_subscription_qr', { p_token: token }); if (error) throw error; return data || '' }
 export async function adminSetSubscriptionQr(qrImage, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_set_subscription_qr', { p_token: token, p_qr_image: qrImage || null }); if (error) throw error; return data || '' }
+export async function adminGetSubscriptionYapeNumber(token) { if (!supabase || !token) return ''; const { data, error } = await supabase.rpc('admin_get_subscription_yape_number', { p_token: token }); if (error) throw error; return data || '' }
+export async function adminSetSubscriptionYapeNumber(yapeNumber, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_set_subscription_yape_number', { p_token: token, p_yape_number: yapeNumber || null }); if (error) throw error; return data || '' }
 export async function getSubscriptionQr() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_qr'); if (error) return ''; return data || '' }
+export async function getSubscriptionYapeNumber() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_yape_number'); if (error) return ''; return data || '' }
 
 export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}, scope = 'event') {
   if (!supabase || !eventId) return () => {}

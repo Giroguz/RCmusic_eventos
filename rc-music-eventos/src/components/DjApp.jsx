@@ -34,8 +34,8 @@ function Stat({ icon: Icon, label, value, accent = 'white' }) {
   return <div className="glass rounded-2xl p-4"><div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl ${accent === 'lime' ? 'bg-neon/15 text-neon' : accent === 'violet' ? 'bg-violet/20 text-violet-200' : accent === 'amber' ? 'bg-amber-300/15 text-amber-200' : 'bg-white/10 text-white/60'}`}><Icon size={18} /></div><p className="text-2xl font-bold">{value}</p><p className="mt-1 text-xs text-white/40">{label}</p></div>
 }
 
-function MediaThumbnail({ src, alt = '', className = '' }) { const [failed, setFailed] = useState(!src); if (failed) return <div className={`grid place-items-center bg-white/10 text-white/25 ${className}`} aria-label={alt}><Music2 size={20} /></div>; return <img src={src} alt={alt} className={className} onError={() => setFailed(true)} /> }
-function PreviewFrame({ track }) {
+function MediaThumbnail({ src, alt = '', className = '' }) { const [failed, setFailed] = useState(!src); if (failed) return <img src="/music-placeholder.svg" alt={alt || 'Música'} className={className} />; return <img src={src} alt={alt} className={className} onError={() => setFailed(true)} /> }
+function PreviewFrame({ track }) { if (track.source === 'unknown') return <div className="grid min-h-40 place-items-center p-8 text-center text-sm text-white/55">Este pedido no tiene una vista previa disponible.</div>
   if (track.source === 'spotify' || String(track.videoId || '').startsWith('spotify:')) {
     const spotifyId = track.spotifyId || String(track.videoId).replace(/^spotify:/, '')
     return <iframe title={track.title} src={`https://open.spotify.com/embed/track/${spotifyId}`} className="h-[352px] w-full" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" />

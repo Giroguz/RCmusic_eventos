@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Headphones, KeyRound, Mail, ShieldCheck } from 'lucide-react'
 import { Brand, PageContainer } from './Brand'
 import LanguagePicker from './LanguagePicker'
@@ -6,8 +6,23 @@ import { signInDj, startDjTrial, supabaseEnabled } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 import { PLAN_OPTIONS, planPriceText } from '../lib/plans'
 
+const REGION_CURRENCIES = { PE: 'PEN', US: 'USD', CA: 'CAD', MX: 'MXN', CO: 'COP', CL: 'CLP', BR: 'BRL', AR: 'ARS', ES: 'EUR', GB: 'GBP' }
+
 function PlanCards() {
-  return <div className="mt-4 grid gap-2 sm:grid-cols-3">{PLAN_OPTIONS.map((plan) => <a key={plan.id} href={`mailto:djgianfrancoromerodechosica@gmail.com?subject=Contratar%20plan%20${encodeURIComponent(plan.label)}&body=Correo%20del%20DJ%3A%20`} className="rounded-xl border border-turquoise/25 bg-turquoise/10 p-3 text-center transition hover:border-turquoise/60 hover:bg-turquoise/15"><strong className="block text-sm text-turquoise">{plan.label}</strong><span className="mt-1 block text-xs text-white/70">{planPriceText(plan, 'PEN')}</span></a>)}</div>
+  const [currency, setCurrency] = useState('PEN')
+  const [rate, setRate] = useState(1)
+  useEffect(() => {
+    const region = String(navigator.language || '').split('-')[1]?.toUpperCase()
+    const target = REGION_CURRENCIES[region] || 'PEN'
+    if (target === 'PEN') return undefined
+    let active = true
+    fetch('https://open.er-api.com/v6/latest/PEN').then((response) => response.json()).then((data) => {
+      const nextRate = Number(data?.rates?.[target])
+      if (active && Number.isFinite(nextRate) && nextRate > 0) { setCurrency(target); setRate(nextRate) }
+    }).catch(() => {})
+    return () => { active = false }
+  }, [])
+  return <div className="mt-4"><p className="mb-2 text-[11px] text-white/45">Precios base en Perú · conversión orientativa según la región del navegador</p><div className="grid gap-2 sm:grid-cols-3">{PLAN_OPTIONS.map((plan) => <a key={plan.id} href={`mailto:djgianfrancoromerodechosica@gmail.com?subject=Contratar%20plan%20${encodeURIComponent(plan.label)}&body=Correo%20del%20DJ%3A%20`} className="rounded-xl border border-turquoise/25 bg-turquoise/10 p-3 text-center transition hover:border-turquoise/60 hover:bg-turquoise/15"><strong className="block text-sm text-turquoise">{plan.label}</strong><span className="mt-1 block text-xs text-white/70">{planPriceText(plan, currency, rate)}</span></a>)}</div></div>
 }
 
 export default function DjLogin({ onLogin, onBack }) {

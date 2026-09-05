@@ -12,7 +12,9 @@ import crypto from 'node:crypto'
 const app = express()
 const port = Number(process.env.PORT || 8787)
 const frontendOrigin = process.env.FRONTEND_ORIGIN || 'https://r-cmusic-eventos.vercel.app'
-const corsOrigin = process.env.CORS_ORIGIN || frontendOrigin
+const configuredCorsOrigins = String(process.env.CORS_ORIGIN || frontendOrigin).split(',').map((value) => value.trim()).filter(Boolean)
+const previewOriginPattern = /^https:\/\/r-cmusic-eventos-git-[a-z0-9-]+-giroguz\.vercel\.app$/i
+function isAllowedFrontendOrigin(origin) { return !origin || configuredCorsOrigins.includes(origin) || previewOriginPattern.test(origin) }
 const driveFolderId = process.env.DRIVE_FOLDER_ID || '1UTIQESYvJcNdKXNsDdDs0dRCrDzs5JvF'
 const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://rcmusic-eventos.onrender.com/api/drive/callback'
 const driveTokenCache = new Map()
@@ -23,7 +25,7 @@ const driveSessions = new Map()
 const driveSessionTtl = 60 * 60 * 24 * 30 * 1000
 const driveCookieKey = crypto.createHash('sha256').update(process.env.DRIVE_SESSION_SECRET || process.env.GOOGLE_CLIENT_SECRET || 'rc-drive-session').digest()
 
-app.use(cors({ origin: corsOrigin, credentials: true }))
+app.use(cors({ origin: (origin, callback) => callback(null, isAllowedFrontendOrigin(origin) ? (origin || frontendOrigin) : false), credentials: true }))
 app.use(express.json())
 
 app.get('/health', (_req, res) => {
@@ -70,7 +72,11 @@ function redirectWithDriveSession(returnTo, sessionId) {
 }
 
 function safeReturnTo(value) {
-  return String(value || frontendOrigin).startsWith(frontendOrigin) ? String(value || frontendOrigin) : frontendOrigin
+  const target = String(value || frontendOrigin)
+  try {
+    const parsed = new URL(target)
+    return isAllowedFrontendOrigin(parsed.origin) ? target : frontendOrigin
+  } catch { return frontendOrigin }
 }
 
 app.get('/api/drive/auth', (req, res) => {

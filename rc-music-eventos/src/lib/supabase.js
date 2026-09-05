@@ -48,11 +48,10 @@ export async function signInDj(email, code) {
   delete session.session_token
   session.token = access.session_token
   if (access.role !== 'admin' && (!access.plan_expires_at || new Date(access.plan_expires_at).getTime() <= Date.now())) {
-    // Keep the short-lived DJ session available so the renewal form can submit a proof.
-    storeDjSession(session)
-    const expired = new Error('DJ plan expired')
-    expired.access = session
-    throw expired
+    // Return the short-lived session directly so the renewal form never depends on storage or a second login.
+    const expiredSession = { ...session, planExpired: true }
+    storeDjSession(expiredSession)
+    return expiredSession
   }
   storeDjSession(session)
   return session
@@ -73,7 +72,7 @@ export async function signOutDj(token = getStoredDjSession()?.token) {
 }
 
 function mapRequest(row) {
-  const rawVideoId = String(row.video_id || ''); const source = rawVideoId.match(/^(spotify|deezer|soundcloud):/)?.[1] || 'youtube'; const videoId = rawVideoId.replace(/^(spotify|deezer|soundcloud):/, ''); const externalUrl = source === 'deezer' ? `https://www.deezer.com/track/${videoId}` : source === 'soundcloud' ? `https://soundcloud.com/search/sounds?q=${encodeURIComponent(`${row.title} ${row.artist}`)}` : ''; return { id: row.id, title: row.title, artist: row.artist, videoId, source, spotifyId: videoId, externalUrl, thumbnail: row.thumbnail, requester: row.requester, dedication: row.dedication || '', paymentProof: row.payment_proof || '', likes: row.likes || 0, status: row.status, createdAt: row.created_at }
+  const rawVideoId = String(row.video_id || ''); const taggedSource = rawVideoId.match(/^(spotify|deezer|soundcloud):/)?.[1] || ''; const videoId = rawVideoId.replace(/^(spotify|deezer|soundcloud):/, ''); const source = taggedSource || (/^[A-Za-z0-9_-]{11}$/.test(videoId) ? 'youtube' : 'unknown'); const externalUrl = source === 'deezer' ? `https://www.deezer.com/track/${videoId}` : source === 'soundcloud' ? `https://soundcloud.com/search/sounds?q=${encodeURIComponent(`${row.title} ${row.artist}`)}` : ''; const thumbnail = row.thumbnail || (source === 'youtube' ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : ''); return { id: row.id, title: row.title, artist: row.artist, videoId, source, spotifyId: videoId, externalUrl, thumbnail, requester: row.requester, dedication: row.dedication || '', paymentProof: row.payment_proof || '', likes: row.likes || 0, status: row.status, createdAt: row.created_at }
 }
 export function mapEvent(row, requests = []) {
   return { id: row.id, code: row.code, name: row.name, djName: row.dj_name, contact: row.contact || '', yapeNumber: row.yape_number || '', thankYou: row.thank_you || '', qrImage: row.qr_image_url || '', tipsRequired: Boolean(row.tips_required), finalized: Boolean(row.finalized_at || row.finalized), finalizedAt: row.finalized_at || null, createdAt: row.created_at, requests: requests.map(mapRequest) }
@@ -173,7 +172,7 @@ export async function adminGetSubscriptionYapeNumber(token) { if (!supabase || !
 export async function adminSetSubscriptionYapeNumber(yapeNumber, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_set_subscription_yape_number', { p_token: token, p_yape_number: yapeNumber || null }); if (error) throw error; return data || '' }
 export async function getSubscriptionQr() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_qr'); if (error) return ''; return data || '' }
 export async function getSubscriptionYapeNumber() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_yape_number'); if (error) return ''; return data || '' }
-export async function submitSubscriptionProof(planType, proofImage, token) { if (!supabase || !token) throw new Error('DJ session required'); const { data, error } = await supabase.rpc('submit_subscription_proof', { p_token: token, p_plan_type: planType, p_proof_image: proofImage }); if (error) throw error; return data }
+export async function submitSubscriptionProof(planType, proofImage, token, email = '', code = '') { if (!supabase) throw new Error('Supabase is not configured'); const rpc = token ? ['submit_subscription_proof', { p_token: token, p_plan_type: planType, p_proof_image: proofImage }] : ['submit_subscription_proof_by_code', { p_email: email, p_code: code, p_plan_type: planType, p_proof_image: proofImage }]; const { data, error } = await supabase.rpc(rpc[0], rpc[1]); if (error) throw error; return data }
 export async function adminListSubscriptionProofs(token) { if (!supabase || !token) return []; const { data, error } = await supabase.rpc('admin_list_subscription_proofs', { p_token: token }); if (error) throw error; return data || [] }
 export async function adminReviewSubscriptionProof(id, status, notes, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_review_subscription_proof', { p_token: token, p_proof_id: id, p_status: status, p_notes: notes || null }); if (error) throw error; return Array.isArray(data) ? data[0] : data }
 

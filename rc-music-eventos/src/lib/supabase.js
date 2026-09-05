@@ -23,6 +23,12 @@ export async function ensureAnonymousSession() {
 
 // DJ access is deliberately not backed by a shared frontend password. The RPC validates
 // a per-DJ code server-side and returns a short-lived, revocable session token.
+export async function sendEmailVerificationLink(email) {
+  if (!supabase) throw new Error('Supabase is not configured')
+  const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: true, emailRedirectTo: window.location.origin } })
+  if (error) throw error
+}
+
 export async function startDjTrial(email, displayName) {
   if (!supabase) throw new Error('Supabase is not configured')
   const { data, error } = await supabase.rpc('dj_start_trial', { p_email: email.trim().toLowerCase(), p_display_name: displayName.trim() })

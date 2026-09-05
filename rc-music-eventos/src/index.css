@@ -31,7 +31,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .home-visual { position: relative; overflow: hidden; border: 1px solid rgba(255,62,165,.24); background: #130717; box-shadow: 0 0 55px rgba(255,23,151,.1); }
 .party-banner::after { content: ''; position: absolute; inset: 0; z-index: 2; background: linear-gradient(90deg, rgba(8,3,13,.92), rgba(8,3,13,.18) 68%, rgba(8,3,13,.68)); pointer-events: none; }
 .party-banner__surface { position: absolute; inset: 1px; overflow: hidden; border-radius: inherit; background: radial-gradient(circle at 78% 34%, rgba(45,226,230,.2), transparent 22%), radial-gradient(circle at 26% 72%, rgba(255,62,165,.24), transparent 27%), linear-gradient(115deg, #09040f, #1b071d 52%, #080510); }
-.party-banner__surface--waves { inset: 0; border-radius: inherit; background: #07030e url('/wave-option-3-background-clean.gif') center/cover no-repeat; }
+.party-banner__surface--waves { inset: 0; border-radius: inherit; background: #07030e url('/wave-option-3-background-clean.gif') center/100% 100% no-repeat; }
 .party-banner__surface--waves::before { display: none; }
 .party-banner__surface::before { content: ''; position: absolute; inset: -45%; background: conic-gradient(from 210deg, transparent, rgba(255,62,165,.28), transparent 23%, rgba(45,226,230,.16), transparent 52%); filter: blur(22px); animation: party-banner-spin 13s linear infinite; }
 .party-banner__light { position: absolute; z-index: 1; width: 35%; height: 170%; top: -35%; filter: blur(22px); opacity: .42; transform: rotate(25deg); animation: party-banner-sweep 6s ease-in-out infinite alternate; }

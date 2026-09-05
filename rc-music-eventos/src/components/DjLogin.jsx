@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, Headphones, KeyRound, LoaderCircle, Mail, ShieldCheck, Upload } from 'lucide-react'
 import { Brand, PageContainer } from './Brand'
 import LanguagePicker from './LanguagePicker'
-import { getSubscriptionQr, getSubscriptionYapeNumber, signInDj, startDjTrial, submitSubscriptionProof, supabaseEnabled } from '../lib/supabase'
+import { getSubscriptionQr, getSubscriptionYapeNumber, sendEmailVerificationLink, signInDj, startDjTrial, submitSubscriptionProof, supabase, supabaseEnabled } from '../lib/supabase'
 // Yape subscription number is loaded from the admin-controlled settings.
 import { useLanguage } from '../lib/i18n'
 import { PLAN_OPTIONS, planPriceText } from '../lib/plans'
@@ -59,9 +59,26 @@ export default function DjLogin({ onLogin, onBack }) {
   const { t, language } = useLanguage(); const [email, setEmail] = useState(''); const [code, setCode] = useState(''); const [show, setShow] = useState(false); const [error, setError] = useState(''); const [planExpired, setPlanExpired] = useState(false); const [expiredSession, setExpiredSession] = useState(null); const [showTrial, setShowTrial] = useState(false); const [trialName, setTrialName] = useState(''); const [trialEmail, setTrialEmail] = useState(''); const [trialCode, setTrialCode] = useState(''); const [trialError, setTrialError] = useState('')
   async function requestTrial(e) {
     e.preventDefault(); setTrialError('')
-    try { if (!supabaseEnabled) throw new Error('SUPABASE_REQUIRED'); const result = await startDjTrial(trialEmail, trialName); setTrialCode(result.generated_code); setEmail(trialEmail); setCode(result.generated_code) }
+    try { if (!supabaseEnabled) throw new Error('SUPABASE_REQUIRED'); sessionStorage.setItem('rc_pending_trial_v1', JSON.stringify({ email: trialEmail.trim().toLowerCase(), displayName: trialName.trim() })); await sendEmailVerificationLink(trialEmail); setTrialError('Te enviamos un enlace de verificación. Ábrelo en tu correo y vuelve a esta página para generar tu demo.') }
     catch (err) { setTrialError(err?.message === 'SUPABASE_REQUIRED' ? t('supabaseRequired') : t('trialUnavailable')) }
   }
+
+  useEffect(() => {
+    if (!supabase) return undefined
+    let active = true
+    const finishVerifiedTrial = async (session) => {
+      try {
+        const pending = JSON.parse(sessionStorage.getItem('rc_pending_trial_v1') || 'null')
+        if (!pending || !session?.user?.email || session.user.email.toLowerCase() !== pending.email || !session.user.email_confirmed_at) return
+        const result = await startDjTrial(pending.email, pending.displayName)
+        if (!active) return
+        sessionStorage.removeItem('rc_pending_trial_v1'); setTrialCode(result.generated_code); setEmail(pending.email); setCode(result.generated_code); setTrialError('Correo verificado. Tu demo está lista.')
+      } catch {}
+    }
+    supabase.auth.getSession().then(({ data }) => finishVerifiedTrial(data.session)).catch(() => {})
+    const { data } = supabase.auth.onAuthStateChange((_, session) => { finishVerifiedTrial(session) })
+    return () => { active = false; data.subscription.unsubscribe() }
+  }, [])
 
   async function submit(e) {
     e.preventDefault(); setError(''); setPlanExpired(false); setExpiredSession(null)

@@ -150,10 +150,10 @@ export async function adminSetDjState(id, state, token) { const { data, error } 
 export async function adminSetDjPlan(id, planType, token) { const { data, error } = await supabase.rpc('admin_set_dj_plan', { p_token: token, p_dj_id: id, p_plan_type: planType }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminRegenerateCode(id, token) { const { data, error } = await supabase.rpc('admin_regenerate_code', { p_token: token, p_dj_id: id }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 
-export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}) {
+export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}, scope = 'event') {
   if (!supabase || !eventId) return () => {}
   const presenceKey = `${role}-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)}`
-  const channel = supabase.channel(`event-presence-${eventId}`, { config: { broadcast: { self: false }, presence: { key: presenceKey } } })
+  const channel = supabase.channel(`event-presence-${scope}-${eventId}`, { config: { broadcast: { self: false }, presence: { key: presenceKey } } })
   const broadcastSeen = new Map()
   let heartbeatTimer
   let refreshTimer

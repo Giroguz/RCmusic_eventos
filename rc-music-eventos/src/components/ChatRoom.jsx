@@ -74,6 +74,7 @@ export default function ChatRoom({ eventId, role = 'attendee', onClose }) {
       setEventFinalized(true)
       setName(role === 'dj' ? 'DJ' : '')
       setNameConfirmed(true)
+      onClose?.()
     }
     clearIfFinalized()
     const statusTimer = setInterval(clearIfFinalized, 15000)
@@ -100,6 +101,7 @@ export default function ChatRoom({ eventId, role = 'attendee', onClose }) {
         setEventFinalized(true)
         setName(role === 'dj' ? 'DJ' : '')
         setNameConfirmed(true)
+        onClose?.()
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }

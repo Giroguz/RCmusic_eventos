@@ -76,7 +76,7 @@ function safeReturnTo(value) {
 app.get('/api/drive/auth', (req, res) => {
   const clientId = process.env.GOOGLE_CLIENT_ID
   if (!clientId || !process.env.GOOGLE_CLIENT_SECRET) return res.status(503).json({ error: 'Google Drive no está configurado' })
-  const state = encryptDriveRefreshToken(safeReturnTo(req.query.returnTo))
+  const state = crypto.randomBytes(24).toString('hex')
   oauthStates.set(state, safeReturnTo(req.query.returnTo))
   setTimeout(() => oauthStates.delete(state), 10 * 60 * 1000)
   const params = new URLSearchParams({ client_id: clientId, redirect_uri: googleRedirectUri, response_type: 'code', access_type: 'offline', prompt: 'consent', scope: 'https://www.googleapis.com/auth/drive.readonly', state })
@@ -84,14 +84,15 @@ app.get('/api/drive/auth', (req, res) => {
 })
 
 app.get('/api/drive/callback', async (req, res) => {
-  const returnTo = safeReturnTo(decryptDriveRefreshToken(String(req.query.state || ''))) || frontendOrigin
+  const returnTo = oauthStates.get(String(req.query.state || '')) || frontendOrigin
   oauthStates.delete(String(req.query.state || ''))
   if (req.query.error) return res.redirect(`${safeReturnTo(returnTo)}?drive=denied`)
   try {
     const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ code: String(req.query.code || ''), client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, redirect_uri: googleRedirectUri, grant_type: 'authorization_code' }) })
     const data = await response.json()
     if (!response.ok || !data.refresh_token) throw new Error('No se obtuvo autorización de Google Drive')
-    // The session token is opaque and encrypted, so it remains valid if the next request reaches another Render instance.
+    // The session token is opaque and encrypted, so it remains valid if the
+    // next request reaches another Render instance.
     const sessionId = encryptDriveRefreshToken(data.refresh_token)
     driveSessions.set(sessionId, { refreshToken: data.refresh_token, expiresAt: Date.now() + driveSessionTtl })
     setTimeout(() => driveSessions.delete(sessionId), driveSessionTtl)
@@ -105,7 +106,7 @@ app.get('/api/drive/callback', async (req, res) => {
 })
 
 async function getDriveAccessToken(req) {
-  const sessionId = String(req.headers['x-drive-session'] || req.query.drive_session || '')
+  const sessionId = String(req.headers['x-drive-session'] || '')
   const session = sessionId ? driveSessions.get(sessionId) : null
   if (session && session.expiresAt <= Date.now()) driveSessions.delete(sessionId)
   const cookieValue = parseCookies(req).drive_refresh_token
@@ -200,13 +201,35 @@ app.get('/api/drive/preview', async (req, res) => {
   const fileId = String(req.query.id || '')
   if (!/^[A-Za-z0-9_-]{10,}$/.test(fileId)) return res.status(400).json({ error: 'Archivo inválido' })
   try {
-    const { accessToken } = await getDriveAccessToken(req)
-    const metadataResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,size`, { headers: { Authorization: `Bearer ${accessToken}` } })
-    if (!metadataResponse.ok) return res.status(404).json({ error: 'Archivo no encontrado' })
-    const file = await metadataResponse.json()
+    const { accessToken, cacheKey } = await getDriveAccessToken(req)
+    const files = await getDriveCatalog(accessToken, cacheKey)
+    const file = files.find((item) => item.id === fileId)
+    if (!file) return res.status(404).json({ error: 'Archivo no encontrado' })
     const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } })
     if (!response.ok || !response.body) return res.status(503).json({ error: 'No se pudo leer el archivo de Google Drive' })
-    res.status(200).set({ 'Content-Type': response.headers.get('content-type') || 'audio/mpeg', 'Content-Length': response.headers.get('content-length') || undefined, 'Content-Disposition': `inline; filename="${file.name.replace(/["\\r\\n]/g, '')}"`, 'Cache-Control': 'no-store' })
+    const sourceType = response.headers.get('content-type') || file.mimeType || ''
+    const needsTranscode = /\.(aif|aiff)$/i.test(file.name) || /aiff/i.test(sourceType)
+    if (needsTranscode) {
+      // Chrome/Android does not decode AIFF in an <audio> element. Convert
+      // only the private preview stream to MP3; downloads remain untouched.
+      const ffmpeg = spawn(process.env.FFMPEG_PATH || 'ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-vn', '-c:a', 'libmp3lame', '-b:a', '192k', '-f', 'mp3', 'pipe:1'], { stdio: ['pipe', 'pipe', 'pipe'] })
+      let conversionError = ''
+      ffmpeg.stderr.on('data', (chunk) => { conversionError += String(chunk).slice(-2000) })
+      ffmpeg.once('error', (error) => {
+        conversionError = error.message
+        if (!res.headersSent) res.status(503).json({ error: 'No se pudo preparar la preescucha' })
+        else res.destroy(error)
+      })
+      res.status(200).set({ 'Content-Type': 'audio/mpeg', 'Content-Disposition': `inline; filename="${file.name.replace(/\.[^.]+$/, '').replace(/["\\r\\n]/g, '')}.mp3"`, 'Cache-Control': 'no-store' })
+      ffmpeg.stdout.pipe(res)
+      Readable.fromWeb(response.body).pipe(ffmpeg.stdin)
+      ffmpeg.once('close', (code) => {
+        if (code !== 0 && !res.writableEnded) res.destroy(new Error(conversionError || 'No se pudo preparar la preescucha'))
+      })
+      req.once('close', () => { if (!res.writableEnded) ffmpeg.kill('SIGTERM') })
+      return
+    }
+    res.status(200).set({ 'Content-Type': sourceType || 'audio/mpeg', 'Content-Length': response.headers.get('content-length') || undefined, 'Content-Disposition': `inline; filename="${file.name.replace(/["\\r\\n]/g, '')}"`, 'Cache-Control': 'no-store' })
     return Readable.fromWeb(response.body).pipe(res)
   } catch (error) {
     if (error.code === 'DRIVE_AUTH_REQUIRED') return res.status(401).json({ error: 'DRIVE_AUTH_REQUIRED' })
@@ -215,29 +238,19 @@ app.get('/api/drive/preview', async (req, res) => {
   }
 })
 
-async function searchDriveCatalog(accessToken, query) {
-  const wanted = normalizeText(query)
-  const words = wanted.split(' ').filter((word) => word.length >= 3).slice(0, 6)
-  const candidates = new Map()
-  for (const word of words) {
-    const data = await driveList(accessToken, `name contains '${word.replace(/'/g, "\\'")}' and trashed = false`, 'id,name,mimeType,size,parents,modifiedTime')
-    for (const file of data.files || []) {
-      if (file.mimeType?.startsWith('audio/') || /\.(mp3|m4a|wav|aif|aiff|flac|ogg)$/i.test(file.name)) candidates.set(file.id, file)
-    }
-  }
-  return [...candidates.values()].map((file) => {
-    const name = normalizeText(file.name.replace(/\.[^.]+$/, ''))
-    const score = (name.includes(wanted) ? 100 : 0) + words.filter((word) => name.includes(word)).length * 10
-    return { file, score }
-  }).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score || a.file.name.localeCompare(b.file.name)).slice(0, 20)
-}
-
 app.get('/api/drive/search', async (req, res) => {
   const query = String(req.query.q || '').trim()
   if (query.length < 2 || query.length > 160) return res.status(400).json({ error: 'Búsqueda inválida' })
   try {
     const { accessToken, cacheKey } = await getDriveAccessToken(req)
-    const matches = await searchDriveCatalog(accessToken, query)
+    const files = await getDriveCatalog(accessToken, cacheKey)
+    const wanted = normalizeText(query)
+    const words = wanted.split(' ').filter((word) => word.length > 1)
+    const matches = files.map((file) => {
+      const name = normalizeText(file.name.replace(/\\.[^.]+$/, ''))
+      const score = (name.includes(wanted) ? 100 : 0) + words.filter((word) => name.includes(word)).length * 10
+      return { file, score }
+    }).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score || a.file.name.localeCompare(b.file.name)).slice(0, 20)
     return res.json({ query, matches: matches.map(({ file, score }) => ({ id: file.id, name: file.name, mimeType: file.mimeType, size: file.size, score })) })
   } catch (error) {
     if (error.code === 'DRIVE_AUTH_REQUIRED') return res.status(401).json({ error: 'DRIVE_AUTH_REQUIRED' })

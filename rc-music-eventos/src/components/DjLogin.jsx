@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Headphones, KeyRound, Mail, ShieldCheck } from 'lucide-react'
 import { Brand, PageContainer } from './Brand'
 import LanguagePicker from './LanguagePicker'
-import { signInDj, startDjTrial, supabaseEnabled } from '../lib/supabase'
+import { getSubscriptionQr, signInDj, startDjTrial, supabaseEnabled } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 import { PLAN_OPTIONS, planPriceText } from '../lib/plans'
 
@@ -11,6 +11,7 @@ const REGION_CURRENCIES = { PE: 'PEN', US: 'USD', CA: 'CAD', MX: 'MXN', CO: 'COP
 function PlanCards() {
   const [currency, setCurrency] = useState('PEN')
   const [rate, setRate] = useState(1)
+  const [subscriptionQr, setSubscriptionQr] = useState('')
   useEffect(() => {
     const region = String(navigator.language || '').split('-')[1]?.toUpperCase()
     const target = REGION_CURRENCIES[region] || 'PEN'
@@ -22,7 +23,8 @@ function PlanCards() {
     }).catch(() => {})
     return () => { active = false }
   }, [])
-  return <div className="mt-4"><p className="mb-2 text-[11px] text-white/45">Precios base en Perú · conversión orientativa según la región del navegador</p><div className="grid gap-2 sm:grid-cols-3">{PLAN_OPTIONS.map((plan) => <a key={plan.id} href={`mailto:djgianfrancoromerodechosica@gmail.com?subject=Contratar%20plan%20${encodeURIComponent(plan.label)}&body=Correo%20del%20DJ%3A%20`} className="rounded-xl border border-turquoise/25 bg-turquoise/10 p-3 text-center transition hover:border-turquoise/60 hover:bg-turquoise/15"><strong className="block text-sm text-turquoise">{plan.label}</strong><span className="mt-1 block text-xs text-white/70">{planPriceText(plan, currency, rate)}</span></a>)}</div></div>
+  useEffect(() => { getSubscriptionQr().then(setSubscriptionQr).catch(() => {}) }, [])
+  return <div className="mt-4"><p className="mb-2 text-[11px] text-white/45">Precios base en Perú · conversión orientativa según la región del navegador</p>{subscriptionQr && <div className="mb-3 flex items-center gap-3 rounded-xl bg-white p-3 text-left text-ink"><img src={subscriptionQr} alt="QR de Yape para suscripciones" className="h-24 w-24 rounded-lg object-contain" /><div><strong className="block text-sm">Paga con Yape</strong><span className="mt-1 block text-xs text-ink/60">Escanea el QR y envía tu comprobante para que el desarrollador active el plan.</span></div></div>}<div className="grid gap-2 sm:grid-cols-3">{PLAN_OPTIONS.map((plan) => <a key={plan.id} href={`mailto:djgianfrancoromerodechosica@gmail.com?subject=Contratar%20plan%20${encodeURIComponent(plan.label)}&body=Correo%20del%20DJ%3A%20`} className="rounded-xl border border-turquoise/25 bg-turquoise/10 p-3 text-center transition hover:border-turquoise/60 hover:bg-turquoise/15"><strong className="block text-sm text-turquoise">{plan.label}</strong><span className="mt-1 block text-xs text-white/70">{planPriceText(plan, currency, rate)}</span></a>)}</div></div>
 }
 
 export default function DjLogin({ onLogin, onBack }) {

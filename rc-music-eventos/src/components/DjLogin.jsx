@@ -48,18 +48,63 @@ function PlanCards({ token, email, code }) {
     try { setProofImage(await proofFileToDataUrl(file)); setProofName(file.name) } catch { setProofMessage('No se pudo leer la imagen. Usa una foto clara y menor de 1.5 MB.') } finally { setProofBusy(false) }
   }
   async function sendProof() {
-    if (!selectedPlan || !proofImage) { setProofMessage('Selecciona un plan y sube la foto del comprobante.'); return }
-    setProofBusy(true); setProofMessage('')
-    try {
-      let currentToken = sessionToken
-      if (!currentToken && email && code) {
-        try { await signInDj(email, code) } catch (error) { currentToken = error?.access?.token || getStoredDjSession()?.token }
-      }
-      if (!currentToken) { setProofMessage('Vuelve a ingresar con tu código para enviar el comprobante.'); return }
-      await submitSubscriptionProof(selectedPlan, proofImage, currentToken)
-      setProofMessage('Comprobante enviado. El desarrollador revisará el pago y activará tu plan.'); setProofImage('')
-    } catch { setProofMessage('No se pudo enviar el comprobante. Inténtalo nuevamente.') } finally { setProofBusy(false) }
+  if (!selectedPlan || !proofImage) {
+    setProofMessage('Selecciona un plan y sube la foto del comprobante.')
+    return
   }
+
+  setProofBusy(true)
+  setProofMessage('')
+
+  try {
+    let currentToken = sessionToken
+
+    if (!currentToken && email && code && supabase) {
+      const { data, error } = await supabase.rpc(
+        'submit_subscription_proof_by_code',
+        {
+          p_email: email.trim().toLowerCase(),
+          p_code: code,
+          p_plan_type: selectedPlan,
+          p_proof_image: proofImage,
+        }
+      )
+
+      if (error) throw error
+
+      setProofMessage(
+        'Comprobante enviado. El desarrollador revisará el pago y activará tu plan.'
+      )
+      setProofImage('')
+      return
+    }
+
+    if (!currentToken) {
+      setProofMessage(
+        'Vuelve a ingresar con tu código para enviar el comprobante.'
+      )
+      return
+    }
+
+    await submitSubscriptionProof(
+      selectedPlan,
+      proofImage,
+      currentToken
+    )
+
+    setProofMessage(
+      'Comprobante enviado. El desarrollador revisará el pago y activará tu plan.'
+    )
+    setProofImage('')
+  } catch {
+    setProofMessage(
+      'No se pudo enviar el comprobante. Inténtalo nuevamente.'
+    )
+  } finally {
+    setProofBusy(false)
+  }
+}
+
   return <div className="mt-4"><p className="mb-2 text-[11px] text-white/45">Precios base en Perú · conversión orientativa según la región del navegador</p>{subscriptionQr && <div className="mb-3 flex items-center gap-3 rounded-xl bg-white p-3 text-left text-ink"><img src={subscriptionQr} alt="QR de Yape para suscripciones" className="h-24 w-24 rounded-lg object-contain" /><div><strong className="block text-sm">Paga con Yape</strong>{yapeNumber && <span className="mt-1 block text-xs font-bold text-ink/75">Número: {yapeNumber}</span>}<span className="mt-1 block text-xs text-ink/60">Escanea el QR o usa el número y luego sube aquí tu comprobante.</span></div></div>}<div className="grid gap-2 sm:grid-cols-3">{PLAN_OPTIONS.map((plan) => <button type="button" key={plan.id} onClick={() => { setSelectedPlan(plan.id); setProofMessage('') }} className={`rounded-xl border p-3 text-center transition ${selectedPlan === plan.id ? 'border-turquoise bg-turquoise/20' : 'border-turquoise/25 bg-turquoise/10 hover:border-turquoise/60'}`}><strong className="block text-sm text-turquoise">{plan.label}</strong><span className="mt-1 block text-xs text-white/70">{planPriceText(plan, currency, rate)}</span></button>)}</div><div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-xs font-bold text-white/75">{selectedPlan ? `Plan elegido: ${PLAN_OPTIONS.find((plan) => plan.id === selectedPlan)?.label}` : '1. Elige el plan que pagaste'}</p><label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-turquoise/30 bg-turquoise/10 px-3 py-2.5 text-xs font-bold text-turquoise hover:bg-turquoise/15"><Upload size={15} />{proofBusy ? 'Procesando…' : '2. Subir comprobante'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={proofBusy} onChange={(e) => { selectProof(e.target.files?.[0]); e.target.value = '' }} className="sr-only" /></label>{proofName && <span className="ml-2 text-xs text-white/50">{proofName}</span>}{proofImage && <img src={proofImage} alt="Vista previa del comprobante" className="mt-3 max-h-40 w-full rounded-lg bg-white object-contain p-1" />}<button type="button" onClick={sendProof} disabled={proofBusy || !proofImage || !selectedPlan} className="btn-primary mt-3 w-full disabled:cursor-not-allowed disabled:opacity-40">{proofBusy ? <LoaderCircle size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}3. Enviar comprobante</button>{proofMessage && <p className="mt-2 text-xs leading-5 text-turquoise">{proofMessage}</p>}</div></div>
 }
 

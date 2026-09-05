@@ -1,19 +1,54 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MessageCircle, Send, Smile, Users, X } from 'lucide-react'
 import { subscribeToEventPresence, supabase } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 
 import { emojis } from '../lib/emojis'
 
+const CHAT_HISTORY_PREFIX = 'rc_music_chat_history_v1_'
+function loadChatHistory(eventId) {
+  const now = Date.now()
+  try {
+    const stored = JSON.parse(localStorage.getItem(`${CHAT_HISTORY_PREFIX}${eventId}`) || 'null')
+    const messages = Array.isArray(stored) ? stored : Array.isArray(stored?.messages) ? stored.messages : []
+    const lastCleanupAt = Number(stored?.lastCleanupAt) || now
+    const elapsedRemovals = Math.min(messages.length, Math.floor(Math.max(0, now - lastCleanupAt) / 8000))
+    const activeMessages = messages.slice(elapsedRemovals)
+    const nextCleanupAt = lastCleanupAt + elapsedRemovals * 8000
+    localStorage.setItem(`${CHAT_HISTORY_PREFIX}${eventId}`, JSON.stringify({ messages: activeMessages, lastCleanupAt: nextCleanupAt }))
+    return { messages: activeMessages, lastCleanupAt: nextCleanupAt }
+  } catch { return { messages: [], lastCleanupAt: now } }
+}
+function saveChatHistory(eventId, messages, lastCleanupAt) {
+  try { localStorage.setItem(`${CHAT_HISTORY_PREFIX}${eventId}`, JSON.stringify({ messages, lastCleanupAt })) } catch {}
+}
+
 export default function ChatRoom({ eventId, role = 'attendee', onClose }) {
   const { t } = useLanguage()
-  const [messages, setMessages] = useState([])
+  const [initialHistory] = useState(() => loadChatHistory(eventId))
+  const [messages, setMessages] = useState(initialHistory.messages)
+  const lastCleanupAt = useRef(initialHistory.lastCleanupAt)
   const [text, setText] = useState('')
   const [name, setName] = useState(() => role === 'dj' ? 'DJ' : '')
   const [online, setOnline] = useState(0)
   const [showEmojis, setShowEmojis] = useState(false)
   const [nameConfirmed, setNameConfirmed] = useState(role === 'dj')
   useEffect(() => subscribeToEventPresence(eventId, role, setOnline, 'chat'), [eventId, role])
+  useEffect(() => {
+    const cleanupTimer = setInterval(() => {
+      const cleanupAt = Date.now()
+      lastCleanupAt.current = cleanupAt
+      setMessages((current) => {
+        const next = current.length ? current.slice(1) : current
+        saveChatHistory(eventId, next, cleanupAt)
+        return next
+      })
+    }, 8000)
+    return () => clearInterval(cleanupTimer)
+  }, [eventId])
+  useEffect(() => {
+    saveChatHistory(eventId, messages, lastCleanupAt.current)
+  }, [eventId, messages])
   useEffect(() => {
     const body = document.body
     const previousOverflow = body.style.overflow
@@ -28,7 +63,7 @@ export default function ChatRoom({ eventId, role = 'attendee', onClose }) {
   useEffect(() => {
     if (!supabase || !eventId) return undefined
     const channel = supabase.channel(`event-chat-${eventId}`)
-      .on('broadcast', { event: 'message' }, ({ payload }) => setMessages((current) => [...current, payload].slice(-100)))
+      .on('broadcast', { event: 'message' }, ({ payload }) => setMessages((current) => [...current, payload]))
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [eventId])

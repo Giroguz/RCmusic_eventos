@@ -36,19 +36,25 @@ export default function DjLogin({ onLogin, onBack }) {
 
   async function changeCode(event) {
     event.preventDefault(); setRecoveryMessage(''); setRecoveryBusy(true)
+    let stage = 'otp'
     try {
       const normalizedEmail = recoveryEmail.trim().toLowerCase()
       const value = newCode.trim()
       if (value.length < 8 || value.length > 64) throw new Error('length')
       const { error: verifyError } = await supabase.auth.verifyOtp({ email: normalizedEmail, token: verificationCode.trim(), type: 'email' })
       if (verifyError) throw verifyError
+      stage = 'save'
       const { error: updateError } = await supabase.rpc('dj_set_admin_code', { p_new_code: value })
       if (updateError) throw updateError
       await supabase.auth.signOut().catch(() => {})
       setRecoveryStep('done')
       setRecoveryMessage('Clave actualizada. Ya puedes cerrar esta ventana e ingresar con la nueva clave.')
       setNewCode(''); setVerificationCode('')
-    } catch { setRecoveryMessage('El código no es válido o no se pudo actualizar la clave. Solicita otro código e inténtalo nuevamente.') }
+    } catch {
+      setRecoveryMessage(stage === 'otp'
+        ? 'El código de verificación no fue aceptado. Solicita un código nuevo e inténtalo una sola vez.'
+        : 'El código fue aceptado, pero la nueva clave no pudo guardarse. No solicites otro OTP todavía.')
+    }
     finally { setRecoveryBusy(false) }
   }
 

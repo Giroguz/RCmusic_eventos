@@ -42,7 +42,7 @@ export default function DjLogin({ onLogin, onBack }) {
       if (value.length < 8 || value.length > 64) throw new Error('length')
       const { error: verifyError } = await supabase.auth.verifyOtp({ email: normalizedEmail, token: verificationCode.trim(), type: 'email' })
       if (verifyError) throw verifyError
-      const { error: updateError } = await supabase.rpc('dj_set_code', { p_new_code: value })
+      const { error: updateError } = await supabase.rpc('dj_set_admin_code', { p_new_code: value })
       if (updateError) throw updateError
       await supabase.auth.signOut().catch(() => {})
       setRecoveryStep('done')

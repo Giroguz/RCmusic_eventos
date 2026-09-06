@@ -16,7 +16,6 @@ export default function App() {
   const [activeEvent, setActiveEvent] = useState(null)
 
   useEffect(() => {
-    // Inicializa la demo o una sesión anónima de Supabase.
     getEvents()
     if (supabaseEnabled) ensureAnonymousSession().catch(() => {})
   }, [])
@@ -30,38 +29,36 @@ export default function App() {
   useEffect(() => {
     const current = window.history.state
     if (!current?.[HISTORY_KEY]) {
-      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen, activeEvent: null }, '', window.location.href)
+      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen, activeEvent: null, appRoot: true }, '', window.location.href)
     }
+
     const handlePopState = (event) => {
       const state = event.state
+      // A modal or chat owns its overlay history. Do not send the user home
+      // when Android returns an entry without app route state.
       if (state?.[HISTORY_KEY]) {
         setScreen(state.screen || 'home')
         setActiveEvent(state.activeEvent || null)
-      } else {
-        // If the user goes back past the app's first screen, keep the app
-        // navigation consistent with its own Back/Home buttons.
-        setScreen('home')
-        setActiveEvent(null)
       }
     }
+
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
   function navigate(nextScreen, nextEvent = null) {
-    const state = { [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent }
+    const current = window.history.state
+    if (current?.[HISTORY_KEY] && current.screen === nextScreen && current.activeEvent?.id === nextEvent?.id) return
+    const state = { ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent, appRoot: false }
     window.history.pushState(state, '', window.location.href)
     setActiveEvent(nextEvent)
     setScreen(nextScreen)
   }
 
   function goBack() {
-    if (window.history.state?.[HISTORY_KEY] && window.history.length > 1) {
+    if (window.history.state?.[HISTORY_KEY] && window.history.state.screen !== 'home') {
       window.history.back()
-      return
     }
-    setActiveEvent(null)
-    setScreen('home')
   }
 
   async function updateEvent(nextEvent) {

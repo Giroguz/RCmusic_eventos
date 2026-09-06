@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import HomeScreen from './components/HomeScreen'
 import JoinEvent from './components/JoinEvent'
-import AttendeeApp from './components/AttendeeAppFixed'
+import AttendeeApp from './components/AttendeeApp'
 import DjLogin from './components/DjLogin'
 import DjApp from './components/DjApp'
 import { getEvents, saveEvents } from './lib/storage'
-import { supabaseEnabled, ensureAnonymousSession, setRequestStatus } from './lib/supabase'
+import { supabaseEnabled, ensureAnonymousSession, setRequestStatus, supabase } from './lib/supabase'
 
 const HISTORY_KEY = 'rcMusicScreen'
 
@@ -18,6 +18,14 @@ export default function App() {
   useEffect(() => {
     getEvents()
     if (supabaseEnabled) ensureAnonymousSession().catch(() => {})
+    try {
+      const pendingRecovery = sessionStorage.getItem('rc_pending_recovery_v1')
+      if (pendingRecovery && supabase) {
+        supabase.auth.getSession().then(({ data }) => {
+          if (data.session?.user?.email?.toLowerCase() === 'djgianfrancoromerodechosica@gmail.com') setScreen('dj-login')
+        }).catch(() => {})
+      }
+    } catch {}
   }, [])
 
   useEffect(() => {
@@ -28,18 +36,11 @@ export default function App() {
 
   useEffect(() => {
     const current = window.history.state
-    if (!current?.[HISTORY_KEY]) {
-      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen, activeEvent: null, appRoot: true }, '', window.location.href)
-    }
-
+    if (!current?.[HISTORY_KEY]) window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen, activeEvent: null, appRoot: true }, '', window.location.href)
     const handlePopState = (event) => {
       const state = event.state
-      if (state?.[HISTORY_KEY]) {
-        setScreen(state.screen || 'home')
-        setActiveEvent(state.activeEvent || null)
-      }
+      if (state?.[HISTORY_KEY]) { setScreen(state.screen || 'home'); setActiveEvent(state.activeEvent || null) }
     }
-
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
@@ -47,28 +48,16 @@ export default function App() {
   function navigate(nextScreen, nextEvent = null) {
     const current = window.history.state
     if (current?.[HISTORY_KEY] && current.screen === nextScreen && current.activeEvent?.id === nextEvent?.id) return
-    const state = { ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent, appRoot: false }
-    window.history.pushState(state, '', window.location.href)
-    setActiveEvent(nextEvent)
-    setScreen(nextScreen)
+    window.history.pushState({ ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent, appRoot: false }, '', window.location.href)
+    setActiveEvent(nextEvent); setScreen(nextScreen)
   }
-
-  function goBack() {
-    if (window.history.state?.[HISTORY_KEY] && window.history.state.screen !== 'home') window.history.back()
-  }
-
+  function goBack() { if (window.history.state?.[HISTORY_KEY] && window.history.state.screen !== 'home') window.history.back() }
   async function updateEvent(nextEvent) {
     const previous = activeEvent
     if (supabaseEnabled && previous && !previous.localOnly) {
       const previousById = Object.fromEntries((previous.requests || []).map((request) => [request.id, request]))
-      for (const request of nextEvent.requests || []) {
-        const oldRequest = previousById[request.id]
-        if (oldRequest && oldRequest.status !== request.status) await setRequestStatus(request.id, request.status)
-      }
-    } else {
-      const events = getEvents().map((event) => event.id === nextEvent.id ? nextEvent : event)
-      saveEvents(events)
-    }
+      for (const request of nextEvent.requests || []) { const oldRequest = previousById[request.id]; if (oldRequest && oldRequest.status !== request.status) await setRequestStatus(request.id, request.status) }
+    } else saveEvents(getEvents().map((event) => event.id === nextEvent.id ? nextEvent : event))
     setActiveEvent(nextEvent)
     if (window.history.state?.[HISTORY_KEY]) window.history.replaceState({ ...window.history.state, activeEvent: nextEvent }, '', window.location.href)
   }

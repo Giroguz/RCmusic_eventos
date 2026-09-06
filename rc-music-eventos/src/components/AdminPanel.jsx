@@ -70,7 +70,7 @@ export default function AdminPanel({ session, onClose }) {
     setProofBusy(true); setError('')
     try { await adminReviewSubscriptionProof(id, status, status === 'approved' ? 'Pago verificado por el desarrollador.' : 'Comprobante rechazado por el desarrollador.', session.token); setNotice(status === 'approved' ? 'Pago aprobado y plan activado.' : 'Comprobante rechazado.'); await load() } catch { setError('No se pudo actualizar el comprobante.') } finally { setProofBusy(false) }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [])   useEffect(() => { const previousOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = previousOverflow } }, [])
 
   async function create(e) {
     e.preventDefault(); setBusy(true); setError('')
@@ -91,7 +91,7 @@ export default function AdminPanel({ session, onClose }) {
     } catch { setError(t('updateDjError')) } finally { setBusy(false) }
   }
 
-  return <div className="fixed inset-0 z-40 overflow-y-auto bg-black/80 p-4 backdrop-blur-sm"><div className="mx-auto my-6 max-w-6xl rounded-[2rem] border border-white/10 bg-ink p-5 sm:p-8">
+  return <div className="fixed inset-0 z-[100] isolate overflow-y-auto overscroll-contain bg-ink p-4"><div className="mx-auto my-6 max-w-6xl rounded-[2rem] border border-white/10 bg-ink p-5 sm:p-8">
     <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="eyebrow text-violet-200">Desarrollador</p><h2 className="mt-2 font-display text-3xl font-bold">Panel del Desarrollador</h2><p className="mt-2 text-sm text-white/50">Autoriza correos, asigna planes y controla el tiempo restante.</p></div><div className="flex items-center gap-2"><LanguagePicker compact /><button onClick={() => action(() => adminRegenerateCode(session.dj_id, session.token))} disabled={busy} className="btn-secondary px-3 py-2 text-xs"><RefreshCw size={14} /> {t('regenerate')}</button><button onClick={onClose} className="rounded-xl p-2 text-white/50 hover:bg-white/10" aria-label={t('close')}><X size={20} /></button></div></div>
     {notice && <div className="mb-4 flex items-center gap-2 rounded-xl border border-neon/20 bg-neon/10 px-3 py-2 text-sm text-neon"><Check size={16} /> {notice}</div>}
     {error && <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</div>}

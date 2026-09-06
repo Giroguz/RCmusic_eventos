@@ -68,7 +68,7 @@ export default function AdminPanel({ session, onClose }) {
   }
   async function reviewProof(id, status) {
     setProofBusy(true); setError('')
-    try { await adminReviewSubscriptionProof(id, status, status === 'approved' ? 'Pago verificado por el desarrollador.' : 'Comprobante rechazado por el desarrollador.', session.token); setNotice(status === 'approved' ? 'Pago aprobado y plan activado.' : 'Comprobante rechazado.'); await load() } catch { setError('No se pudo actualizar el comprobante.') } finally { setProofBusy(false) }
+    try { await adminReviewSubscriptionProof(id, status, status === 'approved' ? 'Pago verificado por el desarrollador.' : 'Comprobante rechazado por el desarrollador.', session.token); setProofs((current) => current.filter((proof) => proof.id !== id)); setNotice(status === 'approved' ? 'Pago aprobado y plan activado.' : 'Comprobante rechazado.'); await load() } catch { setError('No se pudo actualizar el comprobante.') } finally { setProofBusy(false) }
   }
   useEffect(() => { load() }, []);   useEffect(() => { const previousOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = previousOverflow } }, [])
 

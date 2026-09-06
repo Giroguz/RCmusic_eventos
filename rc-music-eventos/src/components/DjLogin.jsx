@@ -61,7 +61,7 @@ export default function DjLogin({ onLogin, onBack }) {
  const { error: verifyError } = await supabase.auth.verifyOtp({ email: normalizedEmail, token: verificationCode.trim(), type: 'email' })
  if (verifyError) throw verifyError
  stage = 'save'
- const { error: updateError } = await supabase.rpc('dj_set_admin_code', { p_new_code: value })
+ const { error: updateError } = await supabase.rpc('dj_set_recovery_code', { p_email: normalizedEmail, p_new_code: value })
  if (updateError) throw updateError
  await supabase.auth.signOut().catch(() => {})
  setRecoveryStep('done')

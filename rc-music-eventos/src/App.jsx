@@ -5,7 +5,7 @@ import AttendeeApp from './components/AttendeeApp'
 import DjLogin from './components/DjLogin'
 import DjApp from './components/DjApp'
 import { getEvents, saveEvents } from './lib/storage'
-import { supabaseEnabled, ensureAnonymousSession, setRequestStatus, supabase } from './lib/supabase'
+import { supabaseEnabled, ensureAnonymousSession, setRequestStatus } from './lib/supabase'
 
 const HISTORY_KEY = 'rcMusicScreen'
 
@@ -18,20 +18,11 @@ export default function App() {
   useEffect(() => {
     getEvents()
     if (supabaseEnabled) ensureAnonymousSession().catch(() => {})
-    try {
-      const pendingRecovery = sessionStorage.getItem('rc_pending_recovery_v1')
-      if (pendingRecovery && supabase) {
-        supabase.auth.getSession().then(({ data }) => {
-          if (data.session?.user?.email?.toLowerCase() === 'djgianfrancoromerodechosica@gmail.com') setScreen('dj-login')
-        }).catch(() => {})
-      }
-    } catch {}
+    try { if (sessionStorage.getItem('rc_pending_recovery_v1')) setScreen('dj-login') } catch {}
   }, [])
 
   useEffect(() => {
-    if (screen === 'dj') {
-      try { localStorage.removeItem('rc_drive_return_screen') } catch {}
-    }
+    if (screen === 'dj') { try { localStorage.removeItem('rc_drive_return_screen') } catch {} }
   }, [screen])
 
   useEffect(() => {

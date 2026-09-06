@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import HomeScreen from './components/HomeScreen'
 import JoinEvent from './components/JoinEvent'
-import AttendeeApp from './components/AttendeeApp'
+import AttendeeApp from './components/AttendeeAppFixed'
 import DjLogin from './components/DjLogin'
 import DjApp from './components/DjApp'
 import { getEvents, saveEvents } from './lib/storage'
@@ -34,8 +34,6 @@ export default function App() {
 
     const handlePopState = (event) => {
       const state = event.state
-      // A modal or chat owns its overlay history. Do not send the user home
-      // when Android returns an entry without app route state.
       if (state?.[HISTORY_KEY]) {
         setScreen(state.screen || 'home')
         setActiveEvent(state.activeEvent || null)
@@ -56,9 +54,7 @@ export default function App() {
   }
 
   function goBack() {
-    if (window.history.state?.[HISTORY_KEY] && window.history.state.screen !== 'home') {
-      window.history.back()
-    }
+    if (window.history.state?.[HISTORY_KEY] && window.history.state.screen !== 'home') window.history.back()
   }
 
   async function updateEvent(nextEvent) {
@@ -74,9 +70,7 @@ export default function App() {
       saveEvents(events)
     }
     setActiveEvent(nextEvent)
-    if (window.history.state?.[HISTORY_KEY]) {
-      window.history.replaceState({ ...window.history.state, activeEvent: nextEvent }, '', window.location.href)
-    }
+    if (window.history.state?.[HISTORY_KEY]) window.history.replaceState({ ...window.history.state, activeEvent: nextEvent }, '', window.location.href)
   }
 
   if (screen === 'attendee-join') return <JoinEvent onBack={goBack} onJoin={(event) => navigate('attendee', event)} />

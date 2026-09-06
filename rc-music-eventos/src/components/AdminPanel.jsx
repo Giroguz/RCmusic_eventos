@@ -3,7 +3,7 @@ import { Check, CheckCircle2, Clock3, FileCheck2, Lock, Plus, RefreshCw, ShieldC
 import { adminCreateDj, adminGetSubscriptionQr, adminGetSubscriptionYapeNumber, adminListDjs, adminListSubscriptionProofs, adminRegenerateCode, adminReviewSubscriptionProof, adminSetDjPlan, adminSetDjState, adminSetSubscriptionQr, adminSetSubscriptionYapeNumber } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 import { PLAN_OPTIONS, countdownText, planPriceText } from '../lib/plans'
-import LanguagePicker from './LanguagePicker'
+
 
 function LiveCountdown({ expiresAt }) {
   const [now, setNow] = useState(Date.now())
@@ -92,7 +92,7 @@ export default function AdminPanel({ session, onClose }) {
   }
 
   return <div className="fixed inset-0 z-[100] isolate overflow-y-auto overscroll-contain bg-ink p-4"><div className="mx-auto my-6 max-w-6xl rounded-[2rem] border border-white/10 bg-ink p-5 sm:p-8">
-    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="eyebrow text-violet-200">Desarrollador</p><h2 className="mt-2 font-display text-3xl font-bold">Panel del Desarrollador</h2><p className="mt-2 text-sm text-white/50">Autoriza correos, asigna planes y controla el tiempo restante.</p></div><div className="flex items-center gap-2"><LanguagePicker compact /><button onClick={() => action(() => adminRegenerateCode(session.dj_id, session.token))} disabled={busy} className="btn-secondary px-3 py-2 text-xs"><RefreshCw size={14} /> {t('regenerate')}</button><button onClick={onClose} className="rounded-xl p-2 text-white/50 hover:bg-white/10" aria-label={t('close')}><X size={20} /></button></div></div>
+    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="eyebrow text-violet-200">Desarrollador</p><h2 className="mt-2 font-display text-3xl font-bold">Panel del Desarrollador</h2><p className="mt-2 text-sm text-white/50">Autoriza correos, asigna planes y controla el tiempo restante.</p></div><div className="mt-2 flex items-center gap-3 sm:mt-3"><button onClick={() => action(() => adminRegenerateCode(session.dj_id, session.token))} disabled={busy} className="btn-secondary px-3 py-2 text-xs"><RefreshCw size={14} /> {t('regenerate')}</button><button onClick={onClose} className="rounded-xl p-2 text-white/50 hover:bg-white/10" aria-label={t('close')}><X size={20} /></button></div></div>
     {notice && <div className="mb-4 flex items-center gap-2 rounded-xl border border-neon/20 bg-neon/10 px-3 py-2 text-sm text-neon"><Check size={16} /> {notice}</div>}
     {error && <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</div>}
     <div className="mb-5 grid gap-3 rounded-2xl border border-violet/20 bg-violet/10 p-4 sm:grid-cols-3"><div><p className="text-xs uppercase tracking-widest text-white/45">Planes disponibles</p><p className="mt-2 font-bold text-violet-100">15 días · S/ 16.00</p><p className="font-bold text-violet-100">Mensual · S/ 30.00</p><p className="font-bold text-violet-100">Anual · S/ 330.00</p></div><div className="sm:col-span-2 flex items-center text-sm leading-6 text-white/65"><ShieldCheck size={18} className="mr-2 shrink-0 text-neon" />El acceso al catálogo privado se habilita únicamente cuando el correo está autorizado y su plan todavía está vigente.</div></div>

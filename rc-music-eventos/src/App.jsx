@@ -14,24 +14,41 @@ export default function App() {
     try { return localStorage.getItem('rc_drive_return_screen') === 'dj' && localStorage.getItem('rc_drive_session') ? 'dj' : 'home' } catch { return 'home' }
   })
   const [activeEvent, setActiveEvent] = useState(null)
+  const [developerLogin, setDeveloperLogin] = useState(false)
 
   useEffect(() => {
+    // Inicializa la demo o una sesión anónima de Supabase.
     getEvents()
     if (supabaseEnabled) ensureAnonymousSession().catch(() => {})
-    try { if (sessionStorage.getItem('rc_pending_recovery_v1')) setScreen('dj-login') } catch {}
+    try {
+      if (sessionStorage.getItem('rc_pending_recovery_v1')) setScreen('dj-login')
+    } catch {}
   }, [])
 
   useEffect(() => {
-    if (screen === 'dj') { try { localStorage.removeItem('rc_drive_return_screen') } catch {} }
+    if (screen === 'dj') {
+      try { localStorage.removeItem('rc_drive_return_screen') } catch {}
+    }
   }, [screen])
 
   useEffect(() => {
     const current = window.history.state
-    if (!current?.[HISTORY_KEY]) window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen, activeEvent: null, appRoot: true }, '', window.location.href)
+    if (!current?.[HISTORY_KEY]) {
+      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen, activeEvent: null, appRoot: true }, '', window.location.href)
+    }
+
     const handlePopState = (event) => {
       const state = event.state
-      if (state?.[HISTORY_KEY]) { setScreen(state.screen || 'home'); setActiveEvent(state.activeEvent || null) }
+      // Overlay states (modal, chat, menu) are handled by the screen that owns
+      // them. Do not change the app route while an overlay is being dismissed.
+      if (state?.[HISTORY_KEY]) {
+        setScreen(state.screen || 'home')
+        setActiveEvent(state.activeEvent || null)
+      }
+      // When the user is already at the app root, let Android/the browser
+      // leave the page normally. Never force a route back to home here.
     }
+
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
@@ -39,23 +56,39 @@ export default function App() {
   function navigate(nextScreen, nextEvent = null) {
     const current = window.history.state
     if (current?.[HISTORY_KEY] && current.screen === nextScreen && current.activeEvent?.id === nextEvent?.id) return
-    window.history.pushState({ ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent, appRoot: false }, '', window.location.href)
-    setActiveEvent(nextEvent); setScreen(nextScreen)
+    const state = { ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent, appRoot: false }
+    window.history.pushState(state, '', window.location.href)
+    setActiveEvent(nextEvent)
+    setScreen(nextScreen)
   }
-  function goBack() { if (window.history.state?.[HISTORY_KEY] && window.history.state.screen !== 'home') window.history.back() }
+
+  function goBack() {
+    if (window.history.state?.[HISTORY_KEY] && window.history.state.screen !== 'home') {
+      window.history.back()
+    }
+  }
+
   async function updateEvent(nextEvent) {
     const previous = activeEvent
     if (supabaseEnabled && previous && !previous.localOnly) {
       const previousById = Object.fromEntries((previous.requests || []).map((request) => [request.id, request]))
-      for (const request of nextEvent.requests || []) { const oldRequest = previousById[request.id]; if (oldRequest && oldRequest.status !== request.status) await setRequestStatus(request.id, request.status) }
-    } else saveEvents(getEvents().map((event) => event.id === nextEvent.id ? nextEvent : event))
+      for (const request of nextEvent.requests || []) {
+        const oldRequest = previousById[request.id]
+        if (oldRequest && oldRequest.status !== request.status) await setRequestStatus(request.id, request.status)
+      }
+    } else {
+      const events = getEvents().map((event) => event.id === nextEvent.id ? nextEvent : event)
+      saveEvents(events)
+    }
     setActiveEvent(nextEvent)
-    if (window.history.state?.[HISTORY_KEY]) window.history.replaceState({ ...window.history.state, activeEvent: nextEvent }, '', window.location.href)
+    if (window.history.state?.[HISTORY_KEY]) {
+      window.history.replaceState({ ...window.history.state, activeEvent: nextEvent }, '', window.location.href)
+    }
   }
 
   if (screen === 'attendee-join') return <JoinEvent onBack={goBack} onJoin={(event) => navigate('attendee', event)} />
   if (screen === 'attendee' && activeEvent) return <AttendeeApp event={activeEvent} onUpdate={updateEvent} onExit={goBack} />
-  if (screen === 'dj-login') return <DjLogin onBack={goBack} onLogin={() => navigate('dj')} />
+  if (screen === 'dj-login') return <DjLogin developerMode={developerLogin} onBack={goBack} onLogin={() => navigate('dj')} />
   if (screen === 'dj') return <DjApp onExit={goBack} />
-  return <HomeScreen onAttendee={() => navigate('attendee-join')} onDj={() => navigate('dj-login')} />
+  return <HomeScreen onAttendee={() => navigate('attendee-join')} onDj={() => { setDeveloperLogin(false); navigate('dj-login') }} onDeveloper={() => { setDeveloperLogin(true); navigate('dj-login') }} />
 }

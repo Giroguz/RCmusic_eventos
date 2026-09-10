@@ -8,9 +8,26 @@ export const supabase = supabaseEnabled ? createClient(url, anonKey) : null
 const SESSION_KEY = 'rc_music_dj_session_v1'
 
 export function getStoredDjSession() {
-  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null') } catch { return null }
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    // Keep the in-tab copy available while also restoring the session after a reload.
+    if (!sessionStorage.getItem(SESSION_KEY)) sessionStorage.setItem(SESSION_KEY, raw)
+    return JSON.parse(raw)
+  } catch { return null }
 }
-function storeDjSession(value) { try { if (value) sessionStorage.setItem(SESSION_KEY, JSON.stringify(value)); else sessionStorage.removeItem(SESSION_KEY) } catch {} }
+function storeDjSession(value) {
+  try {
+    if (value) {
+      const raw = JSON.stringify(value)
+      sessionStorage.setItem(SESSION_KEY, raw)
+      localStorage.setItem(SESSION_KEY, raw)
+    } else {
+      sessionStorage.removeItem(SESSION_KEY)
+      localStorage.removeItem(SESSION_KEY)
+    }
+  } catch {}
+}
 
 export async function ensureAnonymousSession() {
   if (!supabase) return null
@@ -174,6 +191,9 @@ export async function adminSetSubscriptionYapeNumber(yapeNumber, token) { if (!s
 export async function getSubscriptionPlanPrices() { if (!supabase) return []; const { data, error } = await supabase.rpc('get_subscription_plan_prices'); if (error) return []; return data || [] }
 export async function adminGetSubscriptionPlanPrices(token) { if (!supabase || !token) return []; const { data, error } = await supabase.rpc('admin_get_subscription_plan_prices', { p_token: token }); if (error) throw error; return data || [] }
 export async function adminSetSubscriptionPlanPrices(prices, token) { if (!supabase || !token) throw new Error('Admin session required'); const byType = Object.fromEntries((prices || []).map((item) => [item.planType || item.plan_type, item])); const { data, error } = await supabase.rpc('admin_set_subscription_plan_prices', { p_token: token, p_fifteen_days: Number(byType.fifteen?.days), p_fifteen_price: Number(byType.fifteen?.pricePen ?? byType.fifteen?.price_pen), p_monthly_days: Number(byType.monthly?.days), p_monthly_price: Number(byType.monthly?.pricePen ?? byType.monthly?.price_pen), p_annual_days: Number(byType.annual?.days), p_annual_price: Number(byType.annual?.pricePen ?? byType.annual?.price_pen) }); if (error) throw error; return data || [] }
+export async function adminGetDemoDays(token) { if (!supabase || !token) return 1; const { data, error } = await supabase.rpc('admin_get_demo_days', { p_token: token }); if (error) throw error; return Number(data || 1) }
+export async function adminSetDemoDays(days, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_set_demo_days', { p_token: token, p_demo_days: Number(days) }); if (error) throw error; return Number(data || days) }
+export async function getDemoDays() { if (!supabase) return 1; const { data, error } = await supabase.rpc('get_demo_days'); if (error) return 1; return Number(data || 1) }
 export async function adminExtendDjPlan(id, days, token) { const { data, error } = await supabase.rpc('admin_extend_dj_plan', { p_token: token, p_dj_id: id, p_days: Number(days) }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function getSubscriptionQr() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_qr'); if (error) return ''; return data || '' }
 export async function getSubscriptionYapeNumber() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_yape_number'); if (error) return ''; return data || '' }

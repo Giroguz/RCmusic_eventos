@@ -6,7 +6,7 @@ import DjLogin from './components/DjLogin'
 import DjApp from './components/DjApp'
 import AdminPanel from './components/AdminPanel'
 import { getEvents, saveEvents } from './lib/storage'
-import { supabaseEnabled, ensureAnonymousSession, setRequestStatus } from './lib/supabase'
+import { getStoredDjSession, supabaseEnabled, ensureAnonymousSession, setRequestStatus } from './lib/supabase'
 
 const HISTORY_KEY = 'rcMusicScreen'
 
@@ -16,6 +16,7 @@ export default function App() {
   })
   const [activeEvent, setActiveEvent] = useState(null)
   const [developerLogin, setDeveloperLogin] = useState(false)
+  const [djSession, setDjSession] = useState(() => getStoredDjSession())
   const [developerSession, setDeveloperSession] = useState(null)
 
   useEffect(() => {
@@ -90,8 +91,8 @@ export default function App() {
 
   if (screen === 'attendee-join') return <JoinEvent onBack={goBack} onJoin={(event) => navigate('attendee', event)} />
   if (screen === 'attendee' && activeEvent) return <AttendeeApp event={activeEvent} onUpdate={updateEvent} onExit={goBack} />
-  if (screen === 'dj-login') return <DjLogin developerMode={developerLogin} onBack={goBack} onLogin={(access) => { if (developerLogin) { setDeveloperSession(access); navigate('developer') } else navigate('dj') }} />
+  if (screen === 'dj-login') return <DjLogin developerMode={developerLogin} onBack={goBack} onLogin={(access) => { if (developerLogin) { setDeveloperSession(access); navigate('developer') } else { setDjSession(access); navigate('dj') } }} />
   if (screen === 'developer' && developerSession) return <AdminPanel session={developerSession} onClose={goBack} />
-  if (screen === 'dj') return <DjApp onExit={goBack} />
+  if (screen === 'dj') return <DjApp session={djSession} onExit={goBack} />
   return <HomeScreen onAttendee={() => navigate('attendee-join')} onDj={() => { setDeveloperLogin(false); navigate('dj-login') }} onDeveloper={() => { setDeveloperLogin(true); navigate('dj-login') }} />
 }

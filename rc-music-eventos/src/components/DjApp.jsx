@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart3, Check, CheckCircle2, CircleAlert, Clock3, Crown, Download, ExternalLink, Eye, Headphones, ImagePlus, Link2, ListMusic, LoaderCircle, MessageCircleHeart, Music2, PauseCircle, Play, Plus, RefreshCw, Search, Settings2, Sparkles, Trash2, UserRound, X } from 'lucide-react'
 import { AppShell, PageContainer } from './Brand'
 import { getEvents, makeCode, saveEvents } from '../lib/storage'
-import { createDjEvent, finalizeDjEvent, getDjAccess, getDjEventQr, getDjEvents, setRequestStatus, signOutDj, supabaseEnabled, updateDjEventInfo, updateDjEventQr, updateDjEventTipSettings, subscribeToEventPresence } from '../lib/supabase'
+import { createDjEvent, finalizeDjEvent, getDjAccess, getDjEventQr, getDjEvents, getStoredDjSession, setRequestStatus, signOutDj, supabaseEnabled, updateDjEventInfo, updateDjEventQr, updateDjEventTipSettings, subscribeToEventPresence } from '../lib/supabase'
 import AdminPanel from './AdminPanel'
 import { useLanguage } from '../lib/i18n'
 import ChatRoom from './ChatRoom'
@@ -58,7 +58,7 @@ async function fileToQrDataUrl(file) {
   return png.length <= 1150000 ? png : canvas.toDataURL('image/webp', 0.86)
 }
 
-export default function DjApp({ onExit, session }) {
+export default function DjApp({ onExit, session = getStoredDjSession() }) {
   const { t } = useLanguage()
   const [events, setEvents] = useState(() => supabaseEnabled ? [] : getEvents())
   const [activeId, setActiveId] = useState(undefined)

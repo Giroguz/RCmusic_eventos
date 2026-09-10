@@ -180,6 +180,8 @@ export async function getSubscriptionYapeNumber() { if (!supabase) return ''; co
 export async function submitSubscriptionProof(planType, proofImage, token) { if (!supabase || !token) throw new Error('DJ session required'); const { data, error } = await supabase.rpc('submit_subscription_proof', { p_token: token, p_plan_type: planType, p_proof_image: proofImage }); if (error) throw error; return data }
 export async function adminListSubscriptionProofs(token) { if (!supabase || !token) return []; const { data, error } = await supabase.rpc('admin_list_subscription_proofs', { p_token: token }); if (error) throw error; return data || [] }
 export async function adminReviewSubscriptionProof(id, status, notes, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_review_subscription_proof', { p_token: token, p_proof_id: id, p_status: status, p_notes: notes || null }); if (error) throw error; return Array.isArray(data) ? data[0] : data }
+export async function adminDeleteSubscriptionProof(id, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_delete_subscription_proof', { p_token: token, p_proof_id: id }); if (error) throw error; return data }
+export async function adminDeleteDj(id, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_delete_dj', { p_token: token, p_dj_id: id }); if (error) throw error; return data }
 
 export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}, scope = 'event') {
   if (!supabase || !eventId) return () => {}

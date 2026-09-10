@@ -19,7 +19,7 @@ async function proofFileToDataUrl(file) {
   return result
 }
 
-function PlanCards({ token, email, code }) {
+export function PlanCards({ token, email, code }) {
   const sessionToken = token || getStoredDjSession()?.token
   const [currency, setCurrency] = useState('PEN')
   const [rate, setRate] = useState(1)

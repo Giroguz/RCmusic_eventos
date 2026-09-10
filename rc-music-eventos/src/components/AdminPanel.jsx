@@ -73,7 +73,17 @@ export default function AdminPanel({ session, onClose }) {
       setNotice(`Cambios guardados para ${dj.displayName || dj.email}.`); setUserDrafts((current) => ({ ...current, [dj.id]: { planType: selectedPlan, extraDays: '' } })); await load()
     } catch { setError('No se pudieron guardar los cambios del usuario.') } finally { setBusy(false) }
   }
-  async function deleteDj(dj) { if (!window.confirm(`¿Eliminar definitivamente a ${dj.displayName || dj.email}?`)) return; await action(() => adminDeleteDj(dj.id, session.token)); setNotice('Usuario DJ eliminado.') }
+  async function deleteDj(dj) {
+    if (!window.confirm(`¿Eliminar definitivamente a ${dj.displayName || dj.email}?`)) return
+    setBusy(true); setError('')
+    try {
+      const removed = await adminDeleteDj(dj.id, session.token)
+      if (!removed) throw new Error('DJ not deleted')
+      setDjs((current) => current.filter((item) => item.id !== dj.id))
+      setUserDrafts((current) => { const next = { ...current }; delete next[dj.id]; return next })
+      setNotice('Usuario DJ eliminado de la lista.')
+    } catch { setError('No se pudo eliminar el usuario DJ. Aplica la migración de acciones del desarrollador en Supabase.') } finally { setBusy(false) }
+  }
 
   const djUsers = djs.filter((dj) => dj.role !== 'admin'); const pendingProofs = proofs.filter((proof) => proof.status === 'pending').length; const activeDjs = djUsers.filter((dj) => dj.isActive).length; const pendingDjs = djUsers.filter((dj) => !dj.approved).length
   const visibleDjs = djUsers.filter((dj) => { const searchMatch = `${dj.displayName} ${dj.email}`.toLowerCase().includes(userSearch.trim().toLowerCase()); const focusMatch = summaryTarget === 'active' ? dj.isActive : summaryTarget === 'pending' ? !dj.approved : true; return searchMatch && focusMatch })

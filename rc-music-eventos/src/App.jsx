@@ -12,7 +12,11 @@ const HISTORY_KEY = 'rcMusicScreen'
 
 export default function App() {
   const [screen, setScreen] = useState(() => {
-    try { return localStorage.getItem('rc_drive_return_screen') === 'dj' && localStorage.getItem('rc_drive_session') ? 'dj' : 'home' } catch { return 'home' }
+    try {
+      const rememberedRoute = window.history.state?.[HISTORY_KEY] ? window.history.state.screen : null
+      if (rememberedRoute === 'dj' && getStoredDjSession()?.token) return 'dj'
+      return localStorage.getItem('rc_drive_return_screen') === 'dj' && localStorage.getItem('rc_drive_session') ? 'dj' : 'home'
+    } catch { return 'home' }
   })
   const [activeEvent, setActiveEvent] = useState(null)
   const [developerLogin, setDeveloperLogin] = useState(false)
@@ -94,5 +98,5 @@ export default function App() {
   if (screen === 'dj-login') return <DjLogin developerMode={developerLogin} onBack={goBack} onLogin={(access) => { if (developerLogin) { setDeveloperSession(access); navigate('developer') } else { setDjSession(access); navigate('dj') } }} />
   if (screen === 'developer' && developerSession) return <AdminPanel session={developerSession} onClose={goBack} />
   if (screen === 'dj') return <DjApp session={djSession} onExit={goBack} />
-  return <HomeScreen onAttendee={() => navigate('attendee-join')} onDj={() => { setDeveloperLogin(false); navigate('dj-login') }} onDeveloper={() => { setDeveloperLogin(true); navigate('dj-login') }} />
+  return <HomeScreen onAttendee={() => navigate('attendee-join')} onDj={() => { setDeveloperLogin(false); navigate(djSession?.token ? 'dj' : 'dj-login') }} onDeveloper={() => { setDeveloperLogin(true); navigate('dj-login') }} />
 }

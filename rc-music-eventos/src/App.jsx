@@ -55,6 +55,17 @@ export default function App() {
     setActiveEvent(nextEvent || null); setScreen(nextScreen)
   }
 
+  function completeLogin(nextScreen, nextEvent = null) {
+    const current = window.history.state
+    const trail = Array.isArray(current?.routeTrail) && current.routeTrail.length ? current.routeTrail : readRouteStack()
+    const withoutLogin = trail.at(-1)?.screen === 'dj-login' ? trail.slice(0, -1) : trail
+    const baseTrail = withoutLogin.length ? withoutLogin : [{ screen: 'home', activeEvent: null }]
+    const nextTrail = [...baseTrail, { screen: nextScreen, activeEvent: nextEvent || null }]
+    writeRouteStack(nextTrail)
+    window.history.replaceState({ ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent || null, routeTrail: nextTrail, routeIndex: nextTrail.length - 1, appRoot: false }, '', routeHash(nextScreen))
+    setActiveEvent(nextEvent || null); setScreen(nextScreen)
+  }
+
   function goBack() {
     const current = window.history.state
     if (!current?.[HISTORY_KEY]) return
@@ -76,7 +87,7 @@ export default function App() {
 
   if (screen === 'attendee-join') return <JoinEvent onBack={goBack} onJoin={(event) => navigate('attendee', event)} />
   if (screen === 'attendee' && activeEvent) return <AttendeeApp event={activeEvent} onUpdate={updateEvent} onExit={goBack} />
-  if (screen === 'dj-login') return <DjLogin developerMode={developerLogin} onBack={goBack} onLogin={(access) => { if (developerLogin) { setDeveloperSession(access); navigate('developer') } else { setDjSession(access); navigate('dj') } }} />
+  if (screen === 'dj-login') return <DjLogin developerMode={developerLogin} onBack={goBack} onLogin={(access) => { if (developerLogin) { setDeveloperSession(access); completeLogin('developer') } else { setDjSession(access); completeLogin('dj') } }} />
   if (screen === 'developer' && developerSession) return <AdminPanel session={developerSession} onClose={goBack} />
   if (screen === 'dj') return <DjApp session={djSession} onExit={goBack} />
   return <HomeScreen onAttendee={() => navigate('attendee-join')} onDj={() => { setDeveloperLogin(false); navigate('dj-login') }} />

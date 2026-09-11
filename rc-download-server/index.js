@@ -11,9 +11,12 @@ import crypto from 'node:crypto'
 
 const app = express()
 const port = Number(process.env.PORT || 8787)
-const frontendOrigin = process.env.FRONTEND_ORIGIN || 'https://r-cmusic-eventos.vercel.app'
-const corsOrigin = process.env.CORS_ORIGIN || frontendOrigin
-const driveFolderId = process.env.DRIVE_FOLDER_ID || '1UTIQESYvJcNdKXNsDdDs0dRCrDzs5JvF'
+const frontendOrigin = process.env.FRONTEND_ORIGIN || 'https://rc-music-eventos.pages.dev'
+const configuredCorsOrigins = String(process.env.CORS_ORIGIN || 'https://rc-music-eventos.pages.dev,https://r-cmusic-eventos.vercel.app').split(',').map((value) => value.trim()).filter(Boolean)
+const previewOriginPattern = /^https:\/\/r-cmusic-eventos-git-[a-z0-9-]+-giroguz\.vercel\.app$/i
+const cloudflarePagesOriginPattern = /^https:\/\/(?:[a-z0-9-]+\.)?rc-music-eventos\.pages\.dev$/i
+function isAllowedFrontendOrigin(origin) { return !origin || configuredCorsOrigins.includes(origin) || previewOriginPattern.test(origin) || cloudflarePagesOriginPattern.test(origin) }
+const driveFolderId = process.env.DRIVE_FOLDER_ID || '1UTIQESYvJcNdKXNsDdDs5JvF'
 const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://rcmusic-eventos.onrender.com/api/drive/callback'
 const driveTokenCache = new Map()
 let spotifyTokenCache = { value: '', expiresAt: 0 }
@@ -23,7 +26,7 @@ const driveSessions = new Map()
 const driveSessionTtl = 60 * 60 * 24 * 30 * 1000
 const driveCookieKey = crypto.createHash('sha256').update(process.env.DRIVE_SESSION_SECRET || process.env.GOOGLE_CLIENT_SECRET || 'rc-drive-session').digest()
 
-app.use(cors({ origin: corsOrigin, credentials: true }))
+app.use(cors({ origin: (origin, callback) => callback(null, isAllowedFrontendOrigin(origin) ? (origin || frontendOrigin) : false), credentials: true }))
 app.use(express.json())
 
 app.get('/health', (_req, res) => {
@@ -70,7 +73,11 @@ function redirectWithDriveSession(returnTo, sessionId) {
 }
 
 function safeReturnTo(value) {
-  return String(value || frontendOrigin).startsWith(frontendOrigin) ? String(value || frontendOrigin) : frontendOrigin
+  const target = String(value || frontendOrigin)
+  try {
+    const parsed = new URL(target)
+    return isAllowedFrontendOrigin(parsed.origin) ? target : frontendOrigin
+  } catch { return frontendOrigin }
 }
 
 app.get('/api/drive/auth', (req, res) => {
@@ -79,7 +86,7 @@ app.get('/api/drive/auth', (req, res) => {
   const state = crypto.randomBytes(24).toString('hex')
   oauthStates.set(state, safeReturnTo(req.query.returnTo))
   setTimeout(() => oauthStates.delete(state), 10 * 60 * 1000)
-  const params = new URLSearchParams({ client_id: clientId, redirect_uri: googleRedirectUri, response_type: 'code', access_type: 'offline', prompt: 'consent', scope: 'https://www.googleapis.com/auth/drive.readonly', state })
+  const params = new URLSearchParams({ client_id: clientId, redirect_uri: googleRedirectUri, response_type: 'code', access_type: 'offline', prompt: 'consent', scope: 'https://www.googleapis.com/auth/drive', state })
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
 })
 
@@ -224,6 +231,23 @@ app.get('/api/drive/status', (req, res) => {
   const session = sessionId ? driveSessions.get(sessionId) : null
   const cookieToken = parseCookies(req).drive_refresh_token
   res.json({ authenticated: Boolean((session && session.expiresAt > Date.now()) || decryptDriveRefreshToken(cookieToken) || cookieToken) })
+})
+
+app.post('/api/drive/grant-folder-access', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase()
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({ error: 'Correo de DJ inválido' })
+  try {
+    const { accessToken } = await getDriveAccessToken(req)
+    const params = new URLSearchParams({ sendNotificationEmail: 'false', supportsAllDrives: 'true', fields: 'id,emailAddress,role,type' })
+    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFolderId)}/permissions?${params}`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'user', role: 'reader', emailAddress: email }) })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data?.error?.message || 'No se pudo otorgar el permiso de Drive')
+    res.json({ ok: true, permission: data, message: `Acceso de lectura otorgado a ${email}. La carpeta y sus subcarpetas ya están disponibles.` })
+  } catch (error) {
+    if (error?.code === 'DRIVE_AUTH_REQUIRED') return res.status(401).json({ error: 'DRIVE_AUTH_REQUIRED' })
+    console.error(error.message)
+    res.status(502).json({ error: 'No se pudo otorgar el permiso de Drive' })
+  }
 })
 
 app.get('/api/drive/download-test', async (req, res) => {

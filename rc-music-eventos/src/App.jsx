@@ -9,18 +9,22 @@ import { getEvents, saveEvents } from './lib/storage'
 import { getStoredDjSession, supabaseEnabled, ensureAnonymousSession, setRequestStatus } from './lib/supabase'
 
 const HISTORY_KEY = 'rcMusicScreen'
+const ROUTE_STACK_KEY = 'rcMusicRouteStack'
+function readRouteStack() { try { const value = JSON.parse(sessionStorage.getItem(ROUTE_STACK_KEY) || 'null'); return Array.isArray(value) && value.length ? value : [{ screen: 'home', activeEvent: null }] } catch { return [{ screen: 'home', activeEvent: null }] } }
+function writeRouteStack(stack) { try { sessionStorage.setItem(ROUTE_STACK_KEY, JSON.stringify(stack.slice(-20))) } catch {} }
+function routeHash(screen) { return `#${screen || 'home'}` }
 
 export default function App() {
   const [screen, setScreen] = useState(() => {
     try {
       // Conserva la ruta actual al volver desde OAuth, una recarga o el botón
       // atrás del dispositivo. Solo la primera entrada real comienza en Home.
-      return window.history.state?.[HISTORY_KEY]?.screen || 'home'
+      return window.location.hash.slice(1) || window.history.state?.screen || readRouteStack().at(-1)?.screen || 'home'
     } catch { return 'home' }
   })
   const screenRef = useRef(screen)
   const [activeEvent, setActiveEvent] = useState(() => {
-    try { return window.history.state?.[HISTORY_KEY]?.activeEvent || null } catch { return null }
+    try { return window.history.state?.activeEvent || readRouteStack().at(-1)?.activeEvent || null } catch { return null }
   })
   const [developerLogin, setDeveloperLogin] = useState(false)
   const [djSession, setDjSession] = useState(() => getStoredDjSession())
@@ -47,38 +51,50 @@ export default function App() {
 
   useEffect(() => {
     const current = window.history.state
+    const stack = readRouteStack()
+    writeRouteStack(stack)
+    const initial = stack.at(-1) || { screen: 'home', activeEvent: null }
     if (!current?.[HISTORY_KEY]) {
-      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen, activeEvent: current?.[HISTORY_KEY]?.activeEvent || null, appRoot: true }, '', window.location.href)
+      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen: initial.screen, activeEvent: initial.activeEvent || null, routeIndex: stack.length - 1, appRoot: stack.length === 1 }, '', routeHash(initial.screen))
     }
 
-    const handlePopState = (event) => {
-      const state = event.state
-      if (!state?.[HISTORY_KEY]) return
-      // Some mobile WebViews collapse the SPA history to its root entry when
-      // the hardware Back button is used. Recreate the immediately previous
-      // app screen instead of throwing the user to Home.
+    const restorePreviousRoute = (event) => {
+      const state = event?.state || window.history.state
       const currentScreen = screenRef.current
-      if (state.appRoot && state.screen === 'home' && ['dj', 'developer', 'attendee'].includes(currentScreen)) {
-        const previousScreen = currentScreen === 'dj' ? 'dj-login' : currentScreen === 'developer' ? 'dj-login' : 'attendee-join'
-        const previousState = { ...state, [HISTORY_KEY]: true, screen: previousScreen, activeEvent: currentScreen === 'attendee' ? state.activeEvent : null, appRoot: false }
-        window.history.replaceState(previousState, '', window.location.href)
-        setScreen(previousScreen)
-        setActiveEvent(previousState.activeEvent || null)
+      const routes = readRouteStack()
+      const currentIndex = Math.max(0, routes.map((route) => route.screen).lastIndexOf(currentScreen))
+      const previous = currentIndex > 0 ? routes[currentIndex - 1] : null
+      if (previous && currentScreen !== 'home') {
+        const trimmed = routes.slice(0, currentIndex)
+        writeRouteStack(trimmed)
+        const previousState = { ...(state || {}), [HISTORY_KEY]: true, screen: previous.screen, activeEvent: previous.activeEvent || null, routeIndex: currentIndex - 1, appRoot: currentIndex - 1 === 0 }
+        window.history.replaceState(previousState, '', routeHash(previous.screen))
+        setScreen(previous.screen)
+        setActiveEvent(previous.activeEvent || null)
         return
       }
-      setScreen(state.screen || 'home')
-      setActiveEvent(state.activeEvent || null)
+      const hashScreen = window.location.hash.slice(1)
+      if (state?.[HISTORY_KEY] || hashScreen) {
+        const nextScreen = hashScreen || state.screen || 'home'
+        setScreen(nextScreen)
+        setActiveEvent(state?.activeEvent || null)
+      }
     }
 
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
+    window.addEventListener('popstate', restorePreviousRoute)
+    window.addEventListener('hashchange', restorePreviousRoute)
+    return () => { window.removeEventListener('popstate', restorePreviousRoute); window.removeEventListener('hashchange', restorePreviousRoute) }
   }, [])
 
   function navigate(nextScreen, nextEvent = null) {
     const current = window.history.state
     if (current?.[HISTORY_KEY] && current.screen === nextScreen && current.activeEvent?.id === nextEvent?.id) return
-    const state = { ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent, appRoot: false }
-    window.history.pushState(state, '', window.location.href)
+    const routes = readRouteStack()
+    const currentIndex = Math.max(0, routes.map((route) => route.screen).lastIndexOf(screenRef.current))
+    const nextRoutes = [...routes.slice(0, currentIndex + 1), { screen: nextScreen, activeEvent: nextEvent }]
+    writeRouteStack(nextRoutes)
+    const state = { ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent, routeIndex: nextRoutes.length - 1, appRoot: false }
+    window.history.pushState(state, '', routeHash(nextScreen))
     setActiveEvent(nextEvent)
     setScreen(nextScreen)
   }

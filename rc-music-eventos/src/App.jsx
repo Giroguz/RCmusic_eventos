@@ -35,7 +35,6 @@ export default function App() {
   }, [screen])
 
   useEffect(() => {
-    // Inicializa la demo o una sesión anónima de Supabase.
     getEvents()
     if (supabaseEnabled) ensureAnonymousSession().catch(() => {})
     try {
@@ -51,41 +50,36 @@ export default function App() {
 
   useEffect(() => {
     const current = window.history.state
-    const currentScreen = screenRef.current
+    const currentScreen = screenRef.current || 'home'
     const currentEvent = activeEvent || null
     const savedRoutes = readRouteStack()
-    // La entrada inicial debe representar la pantalla que realmente está abierta.
-    // Antes se usaba siempre la última ruta guardada y eso podía reemplazar la
-    // ruta actual por Home al pulsar Atrás después de una recarga.
     const savedLast = savedRoutes.at(-1)
     const stack = savedLast?.screen === currentScreen
       ? savedRoutes
-      : [{ screen: currentScreen || 'home', activeEvent: currentEvent }]
-    writeRouteStack(stack)
+      : [{ screen: currentScreen, activeEvent: currentEvent }]
+    const routeTrail = Array.isArray(current?.routeTrail) && current.routeTrail.length ? current.routeTrail : stack
+    writeRouteStack(routeTrail)
     if (!current?.[HISTORY_KEY]) {
-      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen: currentScreen || 'home', activeEvent: currentEvent, routeIndex: stack.length - 1, appRoot: stack.length === 1 }, '', routeHash(currentScreen))
+      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen: currentScreen, activeEvent: currentEvent, routeTrail, routeIndex: routeTrail.length - 1, appRoot: routeTrail.length === 1 }, '', routeHash(currentScreen))
     }
 
     const syncRouteFromHistory = (event) => {
       const state = event?.state || window.history.state
       if (state?.[HISTORY_KEY]) {
-        const routes = readRouteStack()
-        const routeIndex = Number.isInteger(state.routeIndex) ? state.routeIndex : routes.length - 1
-        writeRouteStack(routes.slice(0, Math.max(0, routeIndex) + 1))
-        setScreen(state.screen || 'home')
+        const trail = Array.isArray(state.routeTrail) && state.routeTrail.length ? state.routeTrail : readRouteStack()
+        writeRouteStack(trail)
+        setScreen(state.screen || screenRef.current || 'home')
         setActiveEvent(state.activeEvent || null)
         return
       }
-      // Si el navegador sale de la pila de la app, vuelve a una pantalla
-      // coherente con el hash, sin forzar un salto adicional a Home.
       const hashScreen = window.location.hash.slice(1)
-      setScreen(hashScreen || 'home')
-      setActiveEvent(null)
-      writeRouteStack([{ screen: hashScreen || 'home', activeEvent: null }])
+      if (hashScreen) {
+        setScreen(hashScreen)
+        setActiveEvent(null)
+        writeRouteStack([{ screen: hashScreen, activeEvent: null }])
+      }
     }
 
-    // pushState + Atrás dispara popstate. No escuchamos hashchange aquí para
-    // evitar procesar dos veces la misma navegación y saltarnos una página.
     window.addEventListener('popstate', syncRouteFromHistory)
     return () => window.removeEventListener('popstate', syncRouteFromHistory)
   }, [])
@@ -93,22 +87,30 @@ export default function App() {
   function navigate(nextScreen, nextEvent = null) {
     const current = window.history.state
     if (current?.[HISTORY_KEY] && current.screen === nextScreen && current.activeEvent?.id === nextEvent?.id) return
-    const routes = readRouteStack()
-    const storedIndex = Number.isInteger(current?.routeIndex) ? current.routeIndex : routes.length - 1
-    const currentIndex = Math.max(0, Math.min(storedIndex, routes.length - 1))
-    const nextRoutes = [...routes.slice(0, currentIndex + 1), { screen: nextScreen, activeEvent: nextEvent }]
-    writeRouteStack(nextRoutes)
-    const state = { ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent, routeIndex: nextRoutes.length - 1, appRoot: false }
+    const currentTrail = Array.isArray(current?.routeTrail) && current.routeTrail.length
+      ? current.routeTrail
+      : [{ screen: current?.screen || screenRef.current || 'home', activeEvent: current?.activeEvent || null }]
+    const nextTrail = [...currentTrail, { screen: nextScreen, activeEvent: nextEvent || null }]
+    writeRouteStack(nextTrail)
+    const state = { ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent || null, routeTrail: nextTrail, routeIndex: nextTrail.length - 1, appRoot: false }
     window.history.pushState(state, '', routeHash(nextScreen))
-    setActiveEvent(nextEvent)
+    setActiveEvent(nextEvent || null)
     setScreen(nextScreen)
   }
 
   function goBack() {
-    const state = window.history.state
-    if (state?.[HISTORY_KEY] && Number.isInteger(state.routeIndex) && state.routeIndex > 0) {
-      window.history.back()
-    }
+    const current = window.history.state
+    if (!current?.[HISTORY_KEY]) return
+    const trail = Array.isArray(current.routeTrail) && current.routeTrail.length ? current.routeTrail : readRouteStack()
+    if (trail.length <= 1) return
+    const previousTrail = trail.slice(0, -1)
+    const previous = previousTrail.at(-1)
+    if (!previous) return
+    writeRouteStack(previousTrail)
+    const previousState = { ...current, [HISTORY_KEY]: true, screen: previous.screen, activeEvent: previous.activeEvent || null, routeTrail: previousTrail, routeIndex: previousTrail.length - 1, appRoot: previousTrail.length === 1 }
+    window.history.replaceState(previousState, '', routeHash(previous.screen))
+    setActiveEvent(previous.activeEvent || null)
+    setScreen(previous.screen)
   }
 
   async function updateEvent(nextEvent) {

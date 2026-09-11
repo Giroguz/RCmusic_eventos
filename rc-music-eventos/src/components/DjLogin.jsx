@@ -137,7 +137,7 @@ export default function DjLogin({ onLogin, onBack, developerMode = false }) {
       }
       const { error } = await supabase.rpc('dj_set_admin_code', { p_new_code: recoveryPassword })
       if (error) throw error
-      setCode(recoveryPassword); setRecoveryMessage('Nueva clave guardada. Ya puedes ingresar al Centro de gestión.'); setRecoveryStep('done')
+      setEmail(recoveryEmail.trim().toLowerCase()); setCode(recoveryPassword); setRecoveryMessage('Nueva clave guardada. El correo y la nueva clave ya quedaron cargados en el formulario de ingreso.'); setRecoveryStep('done')
     } catch { setRecoveryMessage('El código de verificación no es válido o ya venció. Solicita uno nuevo.') }
   }
 

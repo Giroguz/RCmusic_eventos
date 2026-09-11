@@ -51,46 +51,51 @@ export default function App() {
 
   useEffect(() => {
     const current = window.history.state
-    const stack = readRouteStack()
+    const currentScreen = screenRef.current
+    const currentEvent = activeEvent || null
+    const savedRoutes = readRouteStack()
+    // La entrada inicial debe representar la pantalla que realmente está abierta.
+    // Antes se usaba siempre la última ruta guardada y eso podía reemplazar la
+    // ruta actual por Home al pulsar Atrás después de una recarga.
+    const savedLast = savedRoutes.at(-1)
+    const stack = savedLast?.screen === currentScreen
+      ? savedRoutes
+      : [{ screen: currentScreen || 'home', activeEvent: currentEvent }]
     writeRouteStack(stack)
-    const initial = stack.at(-1) || { screen: 'home', activeEvent: null }
     if (!current?.[HISTORY_KEY]) {
-      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen: initial.screen, activeEvent: initial.activeEvent || null, routeIndex: stack.length - 1, appRoot: stack.length === 1 }, '', routeHash(initial.screen))
+      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen: currentScreen || 'home', activeEvent: currentEvent, routeIndex: stack.length - 1, appRoot: stack.length === 1 }, '', routeHash(currentScreen))
     }
 
-    const restorePreviousRoute = (event) => {
+    const syncRouteFromHistory = (event) => {
       const state = event?.state || window.history.state
-      const currentScreen = screenRef.current
-      const routes = readRouteStack()
-      const currentIndex = Math.max(0, routes.map((route) => route.screen).lastIndexOf(currentScreen))
-      const previous = currentIndex > 0 ? routes[currentIndex - 1] : null
-      if (previous && currentScreen !== 'home') {
-        const trimmed = routes.slice(0, currentIndex)
-        writeRouteStack(trimmed)
-        const previousState = { ...(state || {}), [HISTORY_KEY]: true, screen: previous.screen, activeEvent: previous.activeEvent || null, routeIndex: currentIndex - 1, appRoot: currentIndex - 1 === 0 }
-        window.history.replaceState(previousState, '', routeHash(previous.screen))
-        setScreen(previous.screen)
-        setActiveEvent(previous.activeEvent || null)
+      if (state?.[HISTORY_KEY]) {
+        const routes = readRouteStack()
+        const routeIndex = Number.isInteger(state.routeIndex) ? state.routeIndex : routes.length - 1
+        writeRouteStack(routes.slice(0, Math.max(0, routeIndex) + 1))
+        setScreen(state.screen || 'home')
+        setActiveEvent(state.activeEvent || null)
         return
       }
+      // Si el navegador sale de la pila de la app, vuelve a una pantalla
+      // coherente con el hash, sin forzar un salto adicional a Home.
       const hashScreen = window.location.hash.slice(1)
-      if (state?.[HISTORY_KEY] || hashScreen) {
-        const nextScreen = hashScreen || state.screen || 'home'
-        setScreen(nextScreen)
-        setActiveEvent(state?.activeEvent || null)
-      }
+      setScreen(hashScreen || 'home')
+      setActiveEvent(null)
+      writeRouteStack([{ screen: hashScreen || 'home', activeEvent: null }])
     }
 
-    window.addEventListener('popstate', restorePreviousRoute)
-    window.addEventListener('hashchange', restorePreviousRoute)
-    return () => { window.removeEventListener('popstate', restorePreviousRoute); window.removeEventListener('hashchange', restorePreviousRoute) }
+    // pushState + Atrás dispara popstate. No escuchamos hashchange aquí para
+    // evitar procesar dos veces la misma navegación y saltarnos una página.
+    window.addEventListener('popstate', syncRouteFromHistory)
+    return () => window.removeEventListener('popstate', syncRouteFromHistory)
   }, [])
 
   function navigate(nextScreen, nextEvent = null) {
     const current = window.history.state
     if (current?.[HISTORY_KEY] && current.screen === nextScreen && current.activeEvent?.id === nextEvent?.id) return
     const routes = readRouteStack()
-    const currentIndex = Math.max(0, routes.map((route) => route.screen).lastIndexOf(screenRef.current))
+    const storedIndex = Number.isInteger(current?.routeIndex) ? current.routeIndex : routes.length - 1
+    const currentIndex = Math.max(0, Math.min(storedIndex, routes.length - 1))
     const nextRoutes = [...routes.slice(0, currentIndex + 1), { screen: nextScreen, activeEvent: nextEvent }]
     writeRouteStack(nextRoutes)
     const state = { ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent, routeIndex: nextRoutes.length - 1, appRoot: false }
@@ -100,7 +105,8 @@ export default function App() {
   }
 
   function goBack() {
-    if (window.history.state?.[HISTORY_KEY] && window.history.state.screen !== 'home') {
+    const state = window.history.state
+    if (state?.[HISTORY_KEY] && Number.isInteger(state.routeIndex) && state.routeIndex > 0) {
       window.history.back()
     }
   }

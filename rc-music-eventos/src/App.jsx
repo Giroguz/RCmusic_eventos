@@ -13,12 +13,14 @@ const HISTORY_KEY = 'rcMusicScreen'
 export default function App() {
   const [screen, setScreen] = useState(() => {
     try {
-      const rememberedRoute = window.history.state?.[HISTORY_KEY] ? window.history.state.screen : null
-      if (rememberedRoute === 'dj' && getStoredDjSession()?.token) return 'dj'
-      return localStorage.getItem('rc_drive_return_screen') === 'dj' && localStorage.getItem('rc_drive_session') ? 'dj' : 'home'
+      // El acceso al Panel de DJ siempre comienza en la pantalla de ingreso.
+      // No saltamos automáticamente usando una sesión guardada.
+      return 'home'
     } catch { return 'home' }
   })
-  const [activeEvent, setActiveEvent] = useState(null)
+  const [activeEvent, setActiveEvent] = useState(() => {
+    try { return window.history.state?.[HISTORY_KEY]?.activeEvent || null } catch { return null }
+  })
   const [developerLogin, setDeveloperLogin] = useState(false)
   const [djSession, setDjSession] = useState(() => getStoredDjSession())
   const [developerSession, setDeveloperSession] = useState(null)
@@ -41,7 +43,7 @@ export default function App() {
   useEffect(() => {
     const current = window.history.state
     if (!current?.[HISTORY_KEY]) {
-      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen, activeEvent: null, appRoot: true }, '', window.location.href)
+      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen, activeEvent: current?.[HISTORY_KEY]?.activeEvent || null, appRoot: true }, '', window.location.href)
     }
 
     const handlePopState = (event) => {
@@ -98,5 +100,5 @@ export default function App() {
   if (screen === 'dj-login') return <DjLogin developerMode={developerLogin} onBack={goBack} onLogin={(access) => { if (developerLogin) { setDeveloperSession(access); navigate('developer') } else { setDjSession(access); navigate('dj') } }} />
   if (screen === 'developer' && developerSession) return <AdminPanel session={developerSession} onClose={goBack} />
   if (screen === 'dj') return <DjApp session={djSession} onExit={goBack} />
-  return <HomeScreen onAttendee={() => navigate('attendee-join')} onDj={() => { setDeveloperLogin(false); navigate(djSession?.token ? 'dj' : 'dj-login') }} onDeveloper={() => { setDeveloperLogin(true); navigate('dj-login') }} />
+  return <HomeScreen onAttendee={() => navigate('attendee-join')} onDj={() => { setDeveloperLogin(false); navigate('dj-login') }} />
 }

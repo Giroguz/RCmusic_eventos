@@ -57,7 +57,9 @@ export async function startDjTrial(email, displayName) {
 
 export async function signInDj(email, code) {
   if (!supabase) throw new Error('Supabase is not configured')
-  const { data, error } = await supabase.rpc('dj_login', { p_email: email.trim().toLowerCase(), p_code: code })
+  const loginRequest = supabase.rpc('dj_login', { p_email: email.trim().toLowerCase(), p_code: code })
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('LOGIN_TIMEOUT')), 15000))
+  const { data, error } = await Promise.race([loginRequest, timeout])
   if (error) throw error
   const access = Array.isArray(data) ? data[0] : data
   if (!access?.session_token) throw new Error('Access denied')
@@ -182,6 +184,8 @@ function account(row) { return { id: row.id, email: row.email, displayName: row.
 export async function adminListDjs(token) { const { data, error } = await supabase.rpc('admin_list_djs', { p_token: token }); if (error) throw error; return (data || []).map(account) }
 export async function adminCreateDj(input, token) { const { data, error } = await supabase.rpc('admin_create_dj', { p_token: token, p_email: input.email, p_display_name: input.displayName, p_plan_type: input.planType || 'monthly' }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminSetDjState(id, state, token) { const { data, error } = await supabase.rpc('admin_set_dj_state', { p_token: token, p_dj_id: id, p_approved: state.approved, p_blocked: state.blocked }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
+export async function adminUpdateDj(id, input, token) { const { data, error } = await supabase.rpc('admin_update_dj', { p_token: token, p_dj_id: id, p_email: input.email, p_display_name: input.displayName }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
+export async function adminActivateDj(id, input, token) { const { data, error } = await supabase.rpc('admin_activate_dj', { p_token: token, p_dj_id: id || null, p_email: input.email, p_display_name: input.displayName, p_access_code: null, p_plan_type: input.planType }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminSetDjPlan(id, planType, token) { const { data, error } = await supabase.rpc('admin_set_dj_plan', { p_token: token, p_dj_id: id, p_plan_type: planType }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminRegenerateCode(id, token) { const { data, error } = await supabase.rpc('admin_regenerate_code', { p_token: token, p_dj_id: id }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminGetSubscriptionQr(token) { if (!supabase || !token) return ''; const { data, error } = await supabase.rpc('admin_get_subscription_qr', { p_token: token }); if (error) throw error; return data || '' }
@@ -200,6 +204,7 @@ export async function getSubscriptionYapeNumber() { if (!supabase) return ''; co
 export async function submitSubscriptionProof(planType, proofImage, token) { if (!supabase || !token) throw new Error('DJ session required'); const { data, error } = await supabase.rpc('submit_subscription_proof', { p_token: token, p_plan_type: planType, p_proof_image: proofImage }); if (error) throw error; return data }
 export async function adminListSubscriptionProofs(token) { if (!supabase || !token) return []; const { data, error } = await supabase.rpc('admin_list_subscription_proofs', { p_token: token }); if (error) throw error; return data || [] }
 export async function adminReviewSubscriptionProof(id, status, notes, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_review_subscription_proof', { p_token: token, p_proof_id: id, p_status: status, p_notes: notes || null }); if (error) throw error; return Array.isArray(data) ? data[0] : data }
+export async function sendSubscriptionEmail(input) { if (!supabase) throw new Error('Supabase is not configured'); const { data, error } = await supabase.functions.invoke('send-subscription-email', { body: input }); if (error) throw error; if (!data?.ok) throw new Error(data?.error || 'Email failed'); return data }
 export async function adminDeleteSubscriptionProof(id, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_delete_subscription_proof', { p_token: token, p_proof_id: id }); if (error) throw error; return data }
 export async function adminDeleteDj(id, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_delete_dj', { p_token: token, p_dj_id: id }); if (error) throw error; return data }
 

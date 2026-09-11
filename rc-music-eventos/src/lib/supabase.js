@@ -208,7 +208,7 @@ export async function sendSubscriptionEmail(input) { if (!supabase) throw new Er
 export async function adminDeleteSubscriptionProof(id, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_delete_subscription_proof', { p_token: token, p_proof_id: id }); if (error) throw error; return data }
 export async function adminDeleteDj(id, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_delete_dj', { p_token: token, p_dj_id: id }); if (error) throw error; return data }
 
-export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}, scope = 'event') {
+export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}, scope = 'event', countAll = false) {
   if (!supabase || !eventId) return () => {}
   const presenceKey = `${role}-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)}`
   const channel = supabase.channel(`event-presence-${scope}-${eventId}`, { config: { broadcast: { self: false }, presence: { key: presenceKey } } })
@@ -217,14 +217,14 @@ export function subscribeToEventPresence(eventId, role = 'attendee', callback = 
   let refreshTimer
   const countAttendees = () => {
     const state = channel.presenceState()
-    const attendees = Object.values(state).flatMap((metas) => Array.isArray(metas) ? metas : [metas]).filter((presence) => presence?.role === 'attendee')
-    const attendeeIds = new Set(attendees.map((presence) => presence.clientId || `${presence.role}-${presence.joinedAt || JSON.stringify(presence)}`))
+    const members = Object.values(state).flatMap((metas) => Array.isArray(metas) ? metas : [metas]).filter((presence) => countAll ? Boolean(presence?.role) : presence?.role === 'attendee')
+    const memberIds = new Set(members.map((presence) => presence.clientId || `${presence.role}-${presence.joinedAt || JSON.stringify(presence)}`))
     const cutoff = Date.now() - 15000
     for (const [clientId, timestamp] of broadcastSeen) {
       if (timestamp < cutoff) broadcastSeen.delete(clientId)
-      else attendeeIds.add(clientId)
+      else if (countAll || clientId.startsWith('attendee-')) memberIds.add(clientId)
     }
-    callback(attendeeIds.size)
+    callback(memberIds.size)
   }
   const sendHeartbeat = () => {
     channel.send({ type: 'broadcast', event: 'attendee_presence', payload: { role, clientId: presenceKey, timestamp: Date.now() } }).catch(() => {})
@@ -234,7 +234,7 @@ export function subscribeToEventPresence(eventId, role = 'attendee', callback = 
     .on('presence', { event: 'join' }, countAttendees)
     .on('presence', { event: 'leave' }, countAttendees)
     .on('broadcast', { event: 'attendee_presence' }, ({ payload }) => {
-      if (payload?.role === 'attendee' && payload.clientId) {
+      if ((countAll || payload?.role === 'attendee') && payload.clientId) {
         broadcastSeen.set(payload.clientId, Number(payload.timestamp) || Date.now())
         countAttendees()
       }

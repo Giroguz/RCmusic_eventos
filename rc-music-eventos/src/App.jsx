@@ -17,8 +17,6 @@ function routeHash(screen) { return `#${screen || 'home'}` }
 export default function App() {
   const [screen, setScreen] = useState(() => {
     try {
-      // Conserva la ruta actual al volver desde OAuth, una recarga o el botón
-      // atrás del dispositivo. Solo la primera entrada real comienza en Home.
       return window.location.hash.slice(1) || window.history.state?.screen || readRouteStack().at(-1)?.screen || 'home'
     } catch { return 'home' }
   })
@@ -30,22 +28,16 @@ export default function App() {
   const [djSession, setDjSession] = useState(() => getStoredDjSession())
   const [developerSession, setDeveloperSession] = useState(null)
 
-  useEffect(() => {
-    screenRef.current = screen
-  }, [screen])
+  useEffect(() => { screenRef.current = screen }, [screen])
 
   useEffect(() => {
     getEvents()
     if (supabaseEnabled) ensureAnonymousSession().catch(() => {})
-    try {
-      if (sessionStorage.getItem('rc_pending_recovery_v1')) setScreen('dj-login')
-    } catch {}
+    try { if (sessionStorage.getItem('rc_pending_recovery_v1')) setScreen('dj-login') } catch {}
   }, [])
 
   useEffect(() => {
-    if (screen === 'dj') {
-      try { localStorage.removeItem('rc_drive_return_screen') } catch {}
-    }
+    if (screen === 'dj') { try { localStorage.removeItem('rc_drive_return_screen') } catch {} }
   }, [screen])
 
   useEffect(() => {
@@ -54,14 +46,10 @@ export default function App() {
     const currentEvent = activeEvent || null
     const savedRoutes = readRouteStack()
     const savedLast = savedRoutes.at(-1)
-    const stack = savedLast?.screen === currentScreen
-      ? savedRoutes
-      : [{ screen: currentScreen, activeEvent: currentEvent }]
+    const stack = savedLast?.screen === currentScreen ? savedRoutes : [{ screen: currentScreen, activeEvent: currentEvent }]
     const routeTrail = Array.isArray(current?.routeTrail) && current.routeTrail.length ? current.routeTrail : stack
     writeRouteStack(routeTrail)
-    if (!current?.[HISTORY_KEY]) {
-      window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen: currentScreen, activeEvent: currentEvent, routeTrail, routeIndex: routeTrail.length - 1, appRoot: routeTrail.length === 1 }, '', routeHash(currentScreen))
-    }
+    if (!current?.[HISTORY_KEY]) window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen: currentScreen, activeEvent: currentEvent, routeTrail, routeIndex: routeTrail.length - 1, appRoot: routeTrail.length === 1 }, '', routeHash(currentScreen))
 
     const syncRouteFromHistory = (event) => {
       const state = event?.state || window.history.state
@@ -79,7 +67,6 @@ export default function App() {
         writeRouteStack([{ screen: hashScreen, activeEvent: null }])
       }
     }
-
     window.addEventListener('popstate', syncRouteFromHistory)
     return () => window.removeEventListener('popstate', syncRouteFromHistory)
   }, [])
@@ -87,9 +74,7 @@ export default function App() {
   function navigate(nextScreen, nextEvent = null) {
     const current = window.history.state
     if (current?.[HISTORY_KEY] && current.screen === nextScreen && current.activeEvent?.id === nextEvent?.id) return
-    const currentTrail = Array.isArray(current?.routeTrail) && current.routeTrail.length
-      ? current.routeTrail
-      : [{ screen: current?.screen || screenRef.current || 'home', activeEvent: current?.activeEvent || null }]
+    const currentTrail = Array.isArray(current?.routeTrail) && current.routeTrail.length ? current.routeTrail : [{ screen: current?.screen || screenRef.current || 'home', activeEvent: current?.activeEvent || null }]
     const nextTrail = [...currentTrail, { screen: nextScreen, activeEvent: nextEvent || null }]
     writeRouteStack(nextTrail)
     const state = { ...(current || {}), [HISTORY_KEY]: true, screen: nextScreen, activeEvent: nextEvent || null, routeTrail: nextTrail, routeIndex: nextTrail.length - 1, appRoot: false }
@@ -113,28 +98,36 @@ export default function App() {
     setScreen(previous.screen)
   }
 
+  function leaveDjPanel() {
+    const current = window.history.state
+    const trail = Array.isArray(current?.routeTrail) && current.routeTrail.length ? current.routeTrail : readRouteStack()
+    const loginIndex = trail.map((route) => route.screen).lastIndexOf('dj-login')
+    const previousTrail = loginIndex >= 0 ? trail.slice(0, loginIndex + 1) : [{ screen: 'home', activeEvent: null }, { screen: 'dj-login', activeEvent: null }]
+    const previous = previousTrail.at(-1)
+    writeRouteStack(previousTrail)
+    const previousState = { ...current, [HISTORY_KEY]: true, screen: 'dj-login', activeEvent: null, routeTrail: previousTrail, routeIndex: previousTrail.length - 1, appRoot: previousTrail.length === 1 }
+    window.history.replaceState(previousState, '', routeHash('dj-login'))
+    setActiveEvent(null)
+    setScreen(previous.screen)
+  }
+
   async function updateEvent(nextEvent) {
     const previous = activeEvent
     if (supabaseEnabled && previous && !previous.localOnly) {
       const previousById = Object.fromEntries((previous.requests || []).map((request) => [request.id, request]))
-      for (const request of nextEvent.requests || []) {
-        const oldRequest = previousById[request.id]
-        if (oldRequest && oldRequest.status !== request.status) await setRequestStatus(request.id, request.status)
-      }
+      for (const request of nextEvent.requests || []) { const oldRequest = previousById[request.id]; if (oldRequest && oldRequest.status !== request.status) await setRequestStatus(request.id, request.status) }
     } else {
       const events = getEvents().map((event) => event.id === nextEvent.id ? nextEvent : event)
       saveEvents(events)
     }
     setActiveEvent(nextEvent)
-    if (window.history.state?.[HISTORY_KEY]) {
-      window.history.replaceState({ ...window.history.state, activeEvent: nextEvent }, '', window.location.href)
-    }
+    if (window.history.state?.[HISTORY_KEY]) window.history.replaceState({ ...window.history.state, activeEvent: nextEvent }, '', window.location.href)
   }
 
   if (screen === 'attendee-join') return <JoinEvent onBack={goBack} onJoin={(event) => navigate('attendee', event)} />
   if (screen === 'attendee' && activeEvent) return <AttendeeApp event={activeEvent} onUpdate={updateEvent} onExit={goBack} />
   if (screen === 'dj-login') return <DjLogin developerMode={developerLogin} onBack={goBack} onLogin={(access) => { if (developerLogin) { setDeveloperSession(access); navigate('developer') } else { setDjSession(access); navigate('dj') } }} />
   if (screen === 'developer' && developerSession) return <AdminPanel session={developerSession} onClose={goBack} />
-  if (screen === 'dj') return <DjApp session={djSession} onExit={goBack} />
+  if (screen === 'dj') return <DjApp session={djSession} onExit={leaveDjPanel} />
   return <HomeScreen onAttendee={() => navigate('attendee-join')} onDj={() => { setDeveloperLogin(false); navigate('dj-login') }} />
 }

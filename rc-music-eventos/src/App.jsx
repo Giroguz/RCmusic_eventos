@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import HomeScreen from './components/HomeScreen'
 import JoinEvent from './components/JoinEvent'
 import AttendeeApp from './components/AttendeeApp'
@@ -18,12 +18,17 @@ export default function App() {
       return window.history.state?.[HISTORY_KEY]?.screen || 'home'
     } catch { return 'home' }
   })
+  const screenRef = useRef(screen)
   const [activeEvent, setActiveEvent] = useState(() => {
     try { return window.history.state?.[HISTORY_KEY]?.activeEvent || null } catch { return null }
   })
   const [developerLogin, setDeveloperLogin] = useState(false)
   const [djSession, setDjSession] = useState(() => getStoredDjSession())
   const [developerSession, setDeveloperSession] = useState(null)
+
+  useEffect(() => {
+    screenRef.current = screen
+  }, [screen])
 
   useEffect(() => {
     // Inicializa la demo o una sesión anónima de Supabase.
@@ -48,14 +53,21 @@ export default function App() {
 
     const handlePopState = (event) => {
       const state = event.state
-      // Overlay states (modal, chat, menu) are handled by the screen that owns
-      // them. Do not change the app route while an overlay is being dismissed.
-      if (state?.[HISTORY_KEY]) {
-        setScreen(state.screen || 'home')
-        setActiveEvent(state.activeEvent || null)
+      if (!state?.[HISTORY_KEY]) return
+      // Some mobile WebViews collapse the SPA history to its root entry when
+      // the hardware Back button is used. Recreate the immediately previous
+      // app screen instead of throwing the user to Home.
+      const currentScreen = screenRef.current
+      if (state.appRoot && state.screen === 'home' && ['dj', 'developer', 'attendee'].includes(currentScreen)) {
+        const previousScreen = currentScreen === 'dj' ? 'dj-login' : currentScreen === 'developer' ? 'dj-login' : 'attendee-join'
+        const previousState = { ...state, [HISTORY_KEY]: true, screen: previousScreen, activeEvent: currentScreen === 'attendee' ? state.activeEvent : null, appRoot: false }
+        window.history.replaceState(previousState, '', window.location.href)
+        setScreen(previousScreen)
+        setActiveEvent(previousState.activeEvent || null)
+        return
       }
-      // When the user is already at the app root, let Android/the browser
-      // leave the page normally. Never force a route back to home here.
+      setScreen(state.screen || 'home')
+      setActiveEvent(state.activeEvent || null)
     }
 
     window.addEventListener('popstate', handlePopState)

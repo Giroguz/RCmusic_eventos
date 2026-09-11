@@ -158,10 +158,10 @@ async function listDriveFolder(accessToken, parent) {
 async function buildDriveCatalog(accessToken) {
   const folders = [driveFolderId]
   const files = []
-  // Read several subfolders at once. A sequential crawl made the first
-  // search needlessly slow when the DJ library contained many folders.
+  // Read many subfolders concurrently. The catalog is shared by all
+  // authorized users because they search the same library folder.
   while (folders.length) {
-    const batch = folders.splice(0, 8)
+    const batch = folders.splice(0, 16)
     const results = await Promise.all(batch.map((parent) => listDriveFolder(accessToken, parent)))
     for (const children of results) {
       for (const file of children) {
@@ -175,39 +175,42 @@ async function buildDriveCatalog(accessToken) {
 
 const catalogRefreshes = new Map()
 
-async function getDriveCatalog(accessToken, cacheKey) {
-  const cached = driveCatalogCache.get(cacheKey)
+async function getDriveCatalog(accessToken, _cacheKey) {
+  // Every authorized DJ searches the same shared library. Reusing one catalog
+  // avoids crawling all folders again for every Google session.
+  const catalogKey = driveFolderId
+  const cached = driveCatalogCache.get(catalogKey)
   if (cached && cached.expiresAt > Date.now()) return cached.files
 
   // Once a catalog exists, return it immediately while refreshing it in the
   // background. This avoids a second long pause after the five-minute TTL.
   if (cached) {
-    if (!catalogRefreshes.has(cacheKey)) {
+    if (!catalogRefreshes.has(catalogKey)) {
       const refresh = buildDriveCatalog(accessToken)
         .then((files) => {
-          driveCatalogCache.set(cacheKey, { files, expiresAt: Date.now() + 5 * 60 * 1000 })
+          driveCatalogCache.set(catalogKey, { files, expiresAt: Date.now() + 5 * 60 * 1000 })
           return files
         })
         .catch((error) => {
           console.error(error.message)
           return cached.files
         })
-        .finally(() => catalogRefreshes.delete(cacheKey))
-      catalogRefreshes.set(cacheKey, refresh)
+        .finally(() => catalogRefreshes.delete(catalogKey))
+      catalogRefreshes.set(catalogKey, refresh)
     }
     return cached.files
   }
 
-  if (!catalogRefreshes.has(cacheKey)) {
+  if (!catalogRefreshes.has(catalogKey)) {
     const refresh = buildDriveCatalog(accessToken)
       .then((files) => {
-        driveCatalogCache.set(cacheKey, { files, expiresAt: Date.now() + 5 * 60 * 1000 })
+        driveCatalogCache.set(catalogKey, { files, expiresAt: Date.now() + 5 * 60 * 1000 })
         return files
       })
-      .finally(() => catalogRefreshes.delete(cacheKey))
-    catalogRefreshes.set(cacheKey, refresh)
+      .finally(() => catalogRefreshes.delete(catalogKey))
+    catalogRefreshes.set(catalogKey, refresh)
   }
-  return catalogRefreshes.get(cacheKey)
+  return catalogRefreshes.get(catalogKey)
 }
 
 function normalizeText(value) {

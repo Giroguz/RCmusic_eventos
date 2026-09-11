@@ -117,6 +117,12 @@ export async function getDjEvents(token = getStoredDjSession()?.token) {
   return (data || []).map((row) => mapEvent(row, row.requests || []))
 }
 
+export async function deleteDjEvent(eventId, token = getStoredDjSession()?.token) {
+  if (!supabase || !token) throw new Error('DJ session required')
+  const { error } = await supabase.rpc('dj_delete_event', { p_token: token, p_event_id: eventId })
+  if (error) throw error
+}
+
 export async function createDjEvent(input, token = getStoredDjSession()?.token) {
   if (!supabase || !token) throw new Error('DJ session required')
   const { data, error } = await supabase.rpc('dj_create_event', { p_token: token, p_code: input.code, p_name: input.name, p_dj_name: input.djName, p_contact: input.contact, p_yape_number: input.yapeNumber, p_thank_you: input.thankYou })

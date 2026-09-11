@@ -13,7 +13,9 @@ function captureDriveSession() {
       sessionStorage.setItem('rc_drive_session', session)
       url.searchParams.delete('drive_session')
       url.searchParams.delete('drive')
-      window.history.replaceState({}, document.title, url.toString())
+      // Keep the SPA route state so Android/browser Back returns to the
+      // page that opened Drive instead of resetting the app to Home.
+      window.history.replaceState(window.history.state, document.title, url.toString())
     }
   } catch {}
 }
@@ -25,11 +27,19 @@ function driveRequestHeaders() {
   return { 'Content-Type': 'application/json', ...(driveSession ? { 'X-Drive-Session': driveSession } : {}) }
 }
 
-async function driveFetch(url, options, timeoutMs) {
+async function driveFetch(url, options = {}, timeoutMs) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const abortFromCaller = () => controller.abort()
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort()
+    else options.signal.addEventListener('abort', abortFromCaller, { once: true })
+  }
   try { return await fetch(url, { ...options, signal: controller.signal }) }
-  finally { clearTimeout(timer) }
+  finally {
+    clearTimeout(timer)
+    options.signal?.removeEventListener('abort', abortFromCaller)
+  }
 }
 
 async function handleDriveResponse(response) {
@@ -42,9 +52,15 @@ async function handleDriveResponse(response) {
   throw new Error(error || 'DOWNLOAD_FAILED')
 }
 
-export async function searchDriveAudio(query) {
+export async function grantDriveFolderAccess(email) {
   captureDriveSession()
-  const response = await driveFetch(`${apiBase}/drive/search?q=${encodeURIComponent(String(query || '').trim())}`, { headers: driveRequestHeaders(), credentials: 'include' }, 120000)
+  const response = await driveFetch(`${apiBase}/drive/grant-folder-access`, { method: 'POST', headers: driveRequestHeaders(), credentials: 'include', body: JSON.stringify({ email }) }, 120000)
+  return handleDriveResponse(response).then((value) => value.json())
+}
+
+export async function searchDriveAudio(query, signal) {
+  captureDriveSession()
+  const response = await driveFetch(`${apiBase}/drive/search?q=${encodeURIComponent(String(query || '').trim())}`, { headers: driveRequestHeaders(), credentials: 'include', signal }, 120000)
   const data = await handleDriveResponse(response).then((value) => value.json())
   return data.matches || []
 }

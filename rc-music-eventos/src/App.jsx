@@ -13,9 +13,9 @@ const HISTORY_KEY = 'rcMusicScreen'
 export default function App() {
   const [screen, setScreen] = useState(() => {
     try {
-      // El acceso al Panel de DJ siempre comienza en la pantalla de ingreso.
-      // No saltamos automáticamente usando una sesión guardada.
-      return 'home'
+      // Conserva la ruta actual al volver desde OAuth, una recarga o el botón
+      // atrás del dispositivo. Solo la primera entrada real comienza en Home.
+      return window.history.state?.[HISTORY_KEY]?.screen || 'home'
     } catch { return 'home' }
   })
   const [activeEvent, setActiveEvent] = useState(() => {

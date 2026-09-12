@@ -22,6 +22,15 @@ const oauthStates = new Map()
 const driveSessions = new Map()
 const driveSessionTtl = 60 * 60 * 24 * 30 * 1000
 const driveCookieKey = crypto.createHash('sha256').update(process.env.DRIVE_SESSION_SECRET || process.env.GOOGLE_CLIENT_SECRET || 'rc-drive-session').digest()
+const youtubeCacheTtlMs = Number(process.env.YOUTUBE_CACHE_TTL_MS || 6 * 60 * 60 * 1000)
+const youtubeCacheMaxEntries = Number(process.env.YOUTUBE_CACHE_MAX_ENTRIES || 500)
+const youtubeDailyCallLimit = Number(process.env.YOUTUBE_DAILY_CALL_LIMIT || 100)
+const youtubeCache = new Map()
+const youtubeInFlight = new Map()
+const deezerCache = new Map()
+const deezerInFlight = new Map()
+let youtubeQuotaDay = ''
+let youtubeCallsToday = 0
 
 app.use(cors({ origin: corsOrigin, credentials: true }))
 app.use(express.json())
@@ -315,6 +324,100 @@ async function streamDriveFile(req, res, query, format) {
   Readable.fromWeb(response.body).pipe(res)
   return true
 }
+
+function normalizeSearch(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 120)
+}
+
+function pacificDayKey() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+}
+
+function resetYoutubeQuotaIfNeeded() {
+  const day = pacificDayKey()
+  if (day !== youtubeQuotaDay) { youtubeQuotaDay = day; youtubeCallsToday = 0 }
+}
+
+function getProviderCache(cache, key) {
+  const entry = cache.get(key)
+  if (!entry) return null
+  if (entry.expiresAt <= Date.now()) { cache.delete(key); return null }
+  cache.delete(key); cache.set(key, entry)
+  return entry.tracks
+}
+
+function setProviderCache(cache, key, tracks) {
+  cache.delete(key); cache.set(key, { tracks, expiresAt: Date.now() + youtubeCacheTtlMs })
+  while (cache.size > youtubeCacheMaxEntries) cache.delete(cache.keys().next().value)
+}
+
+async function fetchYoutubeSearch(query) {
+  const apiKey = process.env.YOUTUBE_API_KEY
+  if (!apiKey) throw new Error('YouTube no está configurado en el servidor')
+  resetYoutubeQuotaIfNeeded()
+  if (youtubeCallsToday >= youtubeDailyCallLimit) {
+    const error = new Error('Se alcanzó el límite diario de búsquedas de YouTube')
+    error.statusCode = 429
+    throw error
+  }
+  youtubeCallsToday += 1
+  const params = new URLSearchParams({ part: 'snippet', maxResults: '8', q: query, type: 'video', videoCategoryId: '10', key: apiKey })
+  const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`)
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const error = new Error(data.error?.message || 'YouTube no respondió')
+    error.statusCode = response.status === 403 ? 429 : 502
+    throw error
+  }
+  return (data.items || []).filter((item) => item.id?.videoId).map((item) => ({
+    id: item.id.videoId,
+    title: item.snippet?.title || '',
+    artist: item.snippet?.channelTitle || '',
+    duration: 'YouTube',
+    source: 'youtube',
+    thumbnail: `https://img.youtube.com/vi/${item.id.videoId}/hqdefault.jpg`,
+    videoUrl: `https://www.youtube-nocookie.com/embed/${item.id.videoId}?autoplay=1&rel=0`,
+  }))
+}
+
+app.get('/api/youtube-search', async (req, res) => {
+  const query = normalizeSearch(req.query.q)
+  if (!query) return res.status(400).json({ error: 'Falta la búsqueda' })
+  const key = query.toLowerCase()
+  const cached = getProviderCache(youtubeCache, key)
+  if (cached) return res.json({ tracks: cached, cached: true })
+  let pending = youtubeInFlight.get(key)
+  if (!pending) {
+    pending = fetchYoutubeSearch(query).then((tracks) => { setProviderCache(youtubeCache, key, tracks); return tracks }).finally(() => youtubeInFlight.delete(key))
+    youtubeInFlight.set(key, pending)
+  }
+  try { return res.json({ tracks: await pending, cached: false }) } catch (error) { return res.status(error.statusCode || 503).json({ error: error.message }) }
+})
+
+async function fetchDeezerSearch(query) {
+  const params = new URLSearchParams({ q: query, limit: '8' })
+  const response = await fetch(`https://api.deezer.com/search?${params}`)
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || data.error) throw new Error('Deezer no respondió')
+  return (data.data || []).map((track) => ({
+    id: String(track.id), title: track.title || '', artist: track.artist?.name || '', duration: track.duration || 0,
+    source: 'deezer', thumbnail: track.album?.cover_medium || track.album?.cover || '', previewUrl: track.preview || '', externalUrl: track.link || `https://www.deezer.com/track/${track.id}`,
+  }))
+}
+
+app.get('/api/deezer-search', async (req, res) => {
+  const query = normalizeSearch(req.query.q)
+  if (!query) return res.status(400).json({ error: 'Falta la búsqueda' })
+  const key = query.toLowerCase()
+  const cached = getProviderCache(deezerCache, key)
+  if (cached) return res.json({ tracks: cached, cached: true })
+  let pending = deezerInFlight.get(key)
+  if (!pending) {
+    pending = fetchDeezerSearch(query).then((tracks) => { setProviderCache(deezerCache, key, tracks); return tracks }).finally(() => deezerInFlight.delete(key))
+    deezerInFlight.set(key, pending)
+  }
+  try { return res.json({ tracks: await pending, cached: false }) } catch (error) { return res.status(503).json({ error: error.message }) }
+})
 
 async function getSpotifyToken() {
   if (spotifyTokenCache.value && spotifyTokenCache.expiresAt > Date.now() + 30_000) return spotifyTokenCache.value

@@ -13,6 +13,7 @@ const app = express()
 const port = Number(process.env.PORT || 8787)
 const frontendOrigin = process.env.FRONTEND_ORIGIN || 'https://r-cmusic-eventos.vercel.app'
 const corsOrigin = process.env.CORS_ORIGIN || frontendOrigin
+const allowedCorsOrigins = new Set([frontendOrigin, ...String(corsOrigin).split(',').map((value) => value.trim()).filter(Boolean), 'https://rc-music-eventos.pages.dev'])
 const driveFolderId = process.env.DRIVE_FOLDER_ID || '1UTIQESYvJcNdKXNsDdDs0dRCrDzs5JvF'
 const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://rcmusic-eventos.onrender.com/api/drive/callback'
 const driveTokenCache = new Map()
@@ -32,7 +33,13 @@ const deezerInFlight = new Map()
 let youtubeQuotaDay = ''
 let youtubeCallsToday = 0
 
-app.use(cors({ origin: corsOrigin, credentials: true }))
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedCorsOrigins.has(origin) || /^https:\/\/[a-z0-9-]+\.rc-music-eventos\.pages\.dev$/.test(origin)) return callback(null, true)
+    return callback(new Error('Origen no autorizado'))
+  },
+  credentials: true,
+}))
 app.use(express.json())
 
 app.get('/health', (_req, res) => {

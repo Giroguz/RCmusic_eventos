@@ -221,10 +221,12 @@ export function subscribeToEventPresence(eventId, role = 'attendee', callback = 
   const broadcastSeen = new Map()
   let heartbeatTimer
   let refreshTimer
+  let tracked = false
   const countAttendees = () => {
     const state = channel.presenceState()
     const members = Object.values(state).flatMap((metas) => Array.isArray(metas) ? metas : [metas]).filter((presence) => countAll ? Boolean(presence?.role) : presence?.role === 'attendee')
     const memberIds = new Set(members.map((presence) => presence.clientId || `${presence.role}-${presence.joinedAt || JSON.stringify(presence)}`))
+    if (tracked && (countAll || role === 'attendee')) memberIds.add(presenceKey)
     const cutoff = Date.now() - 15000
     for (const [clientId, timestamp] of broadcastSeen) {
       if (timestamp < cutoff) broadcastSeen.delete(clientId)
@@ -249,11 +251,12 @@ export function subscribeToEventPresence(eventId, role = 'attendee', callback = 
       if (status === 'SUBSCRIBED') {
         try {
           await channel.track({ role, clientId: presenceKey, joinedAt: Date.now() })
+          tracked = true
           sendHeartbeat()
           countAttendees()
           heartbeatTimer = setInterval(sendHeartbeat, 5000)
           refreshTimer = setInterval(countAttendees, 3000)
-        } catch { reset() }
+        } catch { tracked = false; reset() }
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') reset()
     })
   return () => {

@@ -71,11 +71,11 @@ export default function App() {
     if (!current?.[HISTORY_KEY]) return
     const trail = Array.isArray(current.routeTrail) && current.routeTrail.length ? current.routeTrail : readRouteStack()
     if (trail.length <= 1) return
-    // Each app page is a real history entry created by navigate(). Move back
-    // exactly one browser entry so the previous page and its context are restored
-    // by syncRouteFromHistory(), instead of replacing the current entry and
-    // collapsing the route directly to the home screen.
-    window.history.back()
+    // A login screen can remain as a browser entry in sessions created by an
+    // older build. Never expose it as the destination when leaving the DJ panel.
+    const previousIndex = trail.length - 2
+    const skipLogin = trail[previousIndex]?.screen === 'dj-login' && previousIndex > 0
+    window.history.go(skipLogin ? -2 : -1)
   }
 
   async function updateEvent(nextEvent) {

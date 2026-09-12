@@ -117,3 +117,5 @@ Selecciona `rc-music-eventos` como raíz del proyecto y usa:
 - Output directory: `dist`
 
 No agregues `VITE_YOUTUBE_API_KEY`; la clave debe permanecer en el backend.
+
+Configuración del backend de búsqueda actualizada.

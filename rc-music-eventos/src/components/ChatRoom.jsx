@@ -164,6 +164,7 @@ export default function ChatRoom({ eventId, role = 'attendee', onClose }) {
     e?.preventDefault(); if (eventFinalized) return; const clean = text.trim(); const sender = name.trim() || (role === 'dj' ? 'DJ' : 'Asistente')
     if (!clean || !supabase || !chatChannelReadyRef.current || !chatChannelRef.current) return
     const payload = { id: `${Date.now()}-${Math.random()}`, sender, role, text: clean, createdAt: new Date().toISOString() }
+    setMessages((current) => [...current, payload])
     chatChannelRef.current.send({ type: 'broadcast', event: 'message', payload }).catch(() => {})
     setText(''); setShowEmojis(false)
   }

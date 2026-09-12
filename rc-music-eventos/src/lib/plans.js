@@ -4,8 +4,13 @@ export const PLAN_OPTIONS = [
   { id: 'annual', days: 365, pricePen: 330, label: 'Anual' },
 ]
 
-export function getPlanOption(planType) {
-  return PLAN_OPTIONS.find((plan) => plan.id === planType) || null
+export function getPlanOption(planType, plans = PLAN_OPTIONS) {
+  return plans.find((plan) => plan.id === planType) || null
+}
+
+export function mergePlanOptions(rows = []) {
+  const byType = Object.fromEntries(rows.map((row) => [row.plan_type || row.planType, row]))
+  return PLAN_OPTIONS.map((plan) => ({ ...plan, days: Number(byType[plan.id]?.days) || plan.days, pricePen: Number(byType[plan.id]?.price_pen ?? byType[plan.id]?.pricePen) || plan.pricePen }))
 }
 
 export function formatCountdown(expiresAt, now = Date.now()) {

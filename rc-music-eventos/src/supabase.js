@@ -57,9 +57,7 @@ export async function startDjTrial(email, displayName) {
 
 export async function signInDj(email, code) {
   if (!supabase) throw new Error('Supabase is not configured')
-  const loginRequest = supabase.rpc('dj_login', { p_email: email.trim().toLowerCase(), p_code: code })
-  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('LOGIN_TIMEOUT')), 15000))
-  const { data, error } = await Promise.race([loginRequest, timeout])
+  const { data, error } = await supabase.rpc('dj_login', { p_email: email.trim().toLowerCase(), p_code: code })
   if (error) throw error
   const access = Array.isArray(data) ? data[0] : data
   if (!access?.session_token) throw new Error('Access denied')
@@ -117,12 +115,6 @@ export async function getDjEvents(token = getStoredDjSession()?.token) {
   return (data || []).map((row) => mapEvent(row, row.requests || []))
 }
 
-export async function deleteDjEvent(eventId, token = getStoredDjSession()?.token) {
-  if (!supabase || !token) throw new Error('DJ session required')
-  const { error } = await supabase.rpc('dj_delete_event', { p_token: token, p_event_id: eventId })
-  if (error) throw error
-}
-
 export async function createDjEvent(input, token = getStoredDjSession()?.token) {
   if (!supabase || !token) throw new Error('DJ session required')
   const { data, error } = await supabase.rpc('dj_create_event', { p_token: token, p_code: input.code, p_name: input.name, p_dj_name: input.djName, p_contact: input.contact, p_yape_number: input.yapeNumber, p_thank_you: input.thankYou })
@@ -132,7 +124,7 @@ export async function createDjEvent(input, token = getStoredDjSession()?.token) 
 
 export async function updateDjEventInfo(eventId, input, token = getStoredDjSession()?.token) {
   if (!supabase || !token) throw new Error('DJ session required')
-  const { data, error } = await supabase.rpc('dj_update_event_info', { p_token: token, p_event_id: eventId, p_dj_name: input.djName, p_yape_number: input.yapeNumber, p_contact: input.contact, p_thank_you: input.thankYou || '' })
+  const { data, error } = await supabase.rpc('dj_update_event_info', { p_token: token, p_event_id: eventId, p_dj_name: input.djName, p_yape_number: input.yapeNumber, p_contact: input.contact })
   if (error) throw error
   return mapEvent(Array.isArray(data) ? data[0] : data, [])
 }
@@ -190,8 +182,6 @@ function account(row) { return { id: row.id, email: row.email, displayName: row.
 export async function adminListDjs(token) { const { data, error } = await supabase.rpc('admin_list_djs', { p_token: token }); if (error) throw error; return (data || []).map(account) }
 export async function adminCreateDj(input, token) { const { data, error } = await supabase.rpc('admin_create_dj', { p_token: token, p_email: input.email, p_display_name: input.displayName, p_plan_type: input.planType || 'monthly' }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminSetDjState(id, state, token) { const { data, error } = await supabase.rpc('admin_set_dj_state', { p_token: token, p_dj_id: id, p_approved: state.approved, p_blocked: state.blocked }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
-export async function adminUpdateDj(id, input, token) { const { data, error } = await supabase.rpc('admin_update_dj', { p_token: token, p_dj_id: id, p_email: input.email, p_display_name: input.displayName }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
-export async function adminActivateDj(id, input, token) { const { data, error } = await supabase.rpc('admin_activate_dj', { p_token: token, p_dj_id: id || null, p_email: input.email, p_display_name: input.displayName, p_access_code: null, p_plan_type: input.planType }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminSetDjPlan(id, planType, token) { const { data, error } = await supabase.rpc('admin_set_dj_plan', { p_token: token, p_dj_id: id, p_plan_type: planType }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminRegenerateCode(id, token) { const { data, error } = await supabase.rpc('admin_regenerate_code', { p_token: token, p_dj_id: id }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function adminGetSubscriptionQr(token) { if (!supabase || !token) return ''; const { data, error } = await supabase.rpc('admin_get_subscription_qr', { p_token: token }); if (error) throw error; return data || '' }
@@ -201,38 +191,32 @@ export async function adminSetSubscriptionYapeNumber(yapeNumber, token) { if (!s
 export async function getSubscriptionPlanPrices() { if (!supabase) return []; const { data, error } = await supabase.rpc('get_subscription_plan_prices'); if (error) return []; return data || [] }
 export async function adminGetSubscriptionPlanPrices(token) { if (!supabase || !token) return []; const { data, error } = await supabase.rpc('admin_get_subscription_plan_prices', { p_token: token }); if (error) throw error; return data || [] }
 export async function adminSetSubscriptionPlanPrices(prices, token) { if (!supabase || !token) throw new Error('Admin session required'); const byType = Object.fromEntries((prices || []).map((item) => [item.planType || item.plan_type, item])); const { data, error } = await supabase.rpc('admin_set_subscription_plan_prices', { p_token: token, p_fifteen_days: Number(byType.fifteen?.days), p_fifteen_price: Number(byType.fifteen?.pricePen ?? byType.fifteen?.price_pen), p_monthly_days: Number(byType.monthly?.days), p_monthly_price: Number(byType.monthly?.pricePen ?? byType.monthly?.price_pen), p_annual_days: Number(byType.annual?.days), p_annual_price: Number(byType.annual?.pricePen ?? byType.annual?.price_pen) }); if (error) throw error; return data || [] }
-export async function adminGetDemoDays(token) { if (!supabase || !token) return 1; const { data, error } = await supabase.rpc('admin_get_demo_days', { p_token: token }); if (error) throw error; return Number(data || 1) }
-export async function adminSetDemoDays(days, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_set_demo_days', { p_token: token, p_demo_days: Number(days) }); if (error) throw error; return Number(data || days) }
-export async function getDemoDays() { if (!supabase) return 1; const { data, error } = await supabase.rpc('get_demo_days'); if (error) return 1; return Number(data || 1) }
 export async function adminExtendDjPlan(id, days, token) { const { data, error } = await supabase.rpc('admin_extend_dj_plan', { p_token: token, p_dj_id: id, p_days: Number(days) }); if (error) throw error; return account(Array.isArray(data) ? data[0] : data) }
 export async function getSubscriptionQr() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_qr'); if (error) return ''; return data || '' }
 export async function getSubscriptionYapeNumber() { if (!supabase) return ''; const { data, error } = await supabase.rpc('get_subscription_yape_number'); if (error) return ''; return data || '' }
 export async function submitSubscriptionProof(planType, proofImage, token) { if (!supabase || !token) throw new Error('DJ session required'); const { data, error } = await supabase.rpc('submit_subscription_proof', { p_token: token, p_plan_type: planType, p_proof_image: proofImage }); if (error) throw error; return data }
 export async function adminListSubscriptionProofs(token) { if (!supabase || !token) return []; const { data, error } = await supabase.rpc('admin_list_subscription_proofs', { p_token: token }); if (error) throw error; return data || [] }
 export async function adminReviewSubscriptionProof(id, status, notes, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_review_subscription_proof', { p_token: token, p_proof_id: id, p_status: status, p_notes: notes || null }); if (error) throw error; return Array.isArray(data) ? data[0] : data }
-export async function sendSubscriptionEmail(input) { if (!supabase) throw new Error('Supabase is not configured'); const { data, error } = await supabase.functions.invoke('send-subscription-email', { body: input }); if (error) throw error; if (!data?.ok) throw new Error(data?.error || 'Email failed'); return data }
 export async function adminDeleteSubscriptionProof(id, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_delete_subscription_proof', { p_token: token, p_proof_id: id }); if (error) throw error; return data }
 export async function adminDeleteDj(id, token) { if (!supabase || !token) throw new Error('Admin session required'); const { data, error } = await supabase.rpc('admin_delete_dj', { p_token: token, p_dj_id: id }); if (error) throw error; return data }
 
-export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}, scope = 'event', countAll = false) {
+export function subscribeToEventPresence(eventId, role = 'attendee', callback = () => {}, scope = 'event') {
   if (!supabase || !eventId) return () => {}
   const presenceKey = `${role}-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)}`
   const channel = supabase.channel(`event-presence-${scope}-${eventId}`, { config: { broadcast: { self: false }, presence: { key: presenceKey } } })
   const broadcastSeen = new Map()
   let heartbeatTimer
   let refreshTimer
-  let tracked = false
   const countAttendees = () => {
     const state = channel.presenceState()
-    const members = Object.values(state).flatMap((metas) => Array.isArray(metas) ? metas : [metas]).filter((presence) => countAll ? Boolean(presence?.role) : presence?.role === 'attendee')
-    const memberIds = new Set(members.map((presence) => presence.clientId || `${presence.role}-${presence.joinedAt || JSON.stringify(presence)}`))
-    if (tracked && (countAll || role === 'attendee')) memberIds.add(presenceKey)
+    const attendees = Object.values(state).flatMap((metas) => Array.isArray(metas) ? metas : [metas]).filter((presence) => presence?.role === 'attendee')
+    const attendeeIds = new Set(attendees.map((presence) => presence.clientId || `${presence.role}-${presence.joinedAt || JSON.stringify(presence)}`))
     const cutoff = Date.now() - 15000
     for (const [clientId, timestamp] of broadcastSeen) {
       if (timestamp < cutoff) broadcastSeen.delete(clientId)
-      else if (countAll || clientId.startsWith('attendee-')) memberIds.add(clientId)
+      else attendeeIds.add(clientId)
     }
-    callback(memberIds.size)
+    callback(attendeeIds.size)
   }
   const sendHeartbeat = () => {
     channel.send({ type: 'broadcast', event: 'attendee_presence', payload: { role, clientId: presenceKey, timestamp: Date.now() } }).catch(() => {})
@@ -242,7 +226,7 @@ export function subscribeToEventPresence(eventId, role = 'attendee', callback = 
     .on('presence', { event: 'join' }, countAttendees)
     .on('presence', { event: 'leave' }, countAttendees)
     .on('broadcast', { event: 'attendee_presence' }, ({ payload }) => {
-      if ((countAll || payload?.role === 'attendee') && payload.clientId) {
+      if (payload?.role === 'attendee' && payload.clientId) {
         broadcastSeen.set(payload.clientId, Number(payload.timestamp) || Date.now())
         countAttendees()
       }
@@ -251,12 +235,11 @@ export function subscribeToEventPresence(eventId, role = 'attendee', callback = 
       if (status === 'SUBSCRIBED') {
         try {
           await channel.track({ role, clientId: presenceKey, joinedAt: Date.now() })
-          tracked = true
           sendHeartbeat()
           countAttendees()
           heartbeatTimer = setInterval(sendHeartbeat, 5000)
           refreshTimer = setInterval(countAttendees, 3000)
-        } catch { tracked = false; reset() }
+        } catch { reset() }
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') reset()
     })
   return () => {

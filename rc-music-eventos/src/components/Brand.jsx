@@ -7,8 +7,8 @@ export function Brand({ compact = false }) {
   const { t } = useLanguage()
   return (
     <div className="flex items-center gap-3">
-      <div className="neon-orb grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-neon/30 bg-white p-1 shadow-glow">
-        <img src={rcMusicLogo} alt="R&C music" className="h-full w-full rounded-xl object-contain" />
+      <div className="neon-orb grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-neon/30 bg-white p-1 shadow-glow">
+        <img src={rcMusicLogo} alt="R&C music" className="h-full w-full rounded-full object-contain" />
       </div>
       <div className="min-w-0">
         <p className="brand-wordmark" aria-label="RCmusic_eventos"><span className="brand-wordmark__rc">RC</span><span className="brand-wordmark__music">music</span><span className="brand-wordmark__events">_eventos</span></p>

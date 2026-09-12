@@ -18,15 +18,23 @@ returns table(id uuid, plan_type text, proof_image text, status text, submitted_
 language plpgsql security definer set search_path=public,extensions as $func$
 declare a public.dj_accounts; p public.subscription_payment_proofs;
 begin
-  select * into a from public._dj_access(p_token);
-  if coalesce(a.role,'') <> 'dj' or a.blocked then raise exception 'DJ access denied'; end if;
+  -- The custom DJ session is the authentication mechanism for this app.
+  -- It must remain usable for a renewal even when the previous plan expired.
+  select d.* into a
+  from public.dj_accounts as d
+  join public.dj_sessions as s on s.dj_id=d.id
+  where s.token_hash=encode(digest(p_token,'sha256'),'hex')
+    and s.expires_at>now()
+    and d.role='dj' and d.approved and not d.blocked
+  limit 1;
+  if a.id is null then raise exception 'DJ access denied'; end if;
   if p_plan_type not in ('fifteen','monthly','annual') then raise exception 'Invalid plan'; end if;
   if p_proof_image is null or length(p_proof_image) < 100 then raise exception 'Proof image required'; end if;
   if length(p_proof_image) > 1500000 then raise exception 'Proof image too large'; end if;
 
   update public.subscription_payment_proofs
     set plan_type=p_plan_type, proof_image=p_proof_image, submitted_at=now(), reviewer_notes=null
-    where dj_id=a.id and status='pending'
+    where dj_id=a.id and public.subscription_payment_proofs.status='pending'
     returning * into p;
   if not found then
     insert into public.subscription_payment_proofs(dj_id,plan_type,proof_image)
@@ -52,28 +60,32 @@ begin
 end $func$;
 grant execute on function public.admin_list_subscription_proofs(text) to anon,authenticated;
 
+drop function if exists public.admin_review_subscription_proof(text,uuid,text,text);
 create or replace function public.admin_review_subscription_proof(p_token text,p_proof_id uuid,p_status text,p_notes text default null)
-returns table(id uuid,dj_id uuid,plan_type text,proof_image text,status text,submitted_at timestamptz,reviewed_at timestamptz,reviewer_notes text)
+returns table(id uuid,dj_id uuid,plan_type text,proof_image text,status text,submitted_at timestamptz,reviewed_at timestamptz,reviewer_notes text,generated_code text)
 language plpgsql security definer set search_path=public,extensions as $func$
-declare a public.dj_accounts; p public.subscription_payment_proofs; d public.dj_accounts;
+declare a public.dj_accounts; p public.subscription_payment_proofs; d public.dj_accounts; raw_code text; p_days integer;
 begin
   select * into a from public._dj_access(p_token);
   if coalesce(a.role,'') <> 'admin' or a.email <> 'djgianfrancoromerodechosica@gmail.com' then raise exception 'Admin only'; end if;
   if p_status not in ('approved','rejected') then raise exception 'Invalid review status'; end if;
-  select * into p from public.subscription_payment_proofs where id=p_proof_id for update;
+  select x.* into p from public.subscription_payment_proofs as x where x.id=p_proof_id for update;
   if not found then raise exception 'Proof not found'; end if;
   if p.status <> 'pending' then raise exception 'Proof already reviewed'; end if;
-
-  update public.subscription_payment_proofs
+  update public.subscription_payment_proofs as x
     set status=p_status, reviewed_at=now(), reviewed_by=a.id, reviewer_notes=nullif(trim(p_notes),'')
-    where id=p_proof_id returning * into p;
-
+    where x.id=p_proof_id returning x.* into p;
   if p_status='approved' then
-    update public.dj_accounts set approved=true,
+    raw_code := upper(substr(encode(gen_random_bytes(8),'hex'),1,10));
+    select case p.plan_type when 'fifteen' then s.fifteen_days when 'monthly' then s.monthly_days when 'annual' then s.annual_days end into p_days from public.subscription_settings as s where s.id=true;
+    p_days := coalesce(p_days, case p.plan_type when 'fifteen' then 15 when 'monthly' then 30 when 'annual' then 365 end);
+    update public.dj_accounts as x set approved=true, blocked=false,
+      access_code_hash=encode(digest(raw_code,'sha256'),'hex'), access_code_display=raw_code,
       plan_type=p.plan_type, plan_started_at=now(),
-      plan_expires_at=case when p.plan_type='fifteen' then now()+interval '15 days' when p.plan_type='monthly' then now()+interval '30 days' when p.plan_type='annual' then now()+interval '365 days' end
-      where id=p.dj_id and role='dj' returning * into d;
+      plan_expires_at=now()+make_interval(days=>p_days)
+      where x.id=p.dj_id and x.role='dj' returning x.* into d;
+    if d.id is null then raise exception 'DJ account not found'; end if;
   end if;
-  return query select p.id,p.dj_id,p.plan_type,p.proof_image,p.status,p.submitted_at,p.reviewed_at,p.reviewer_notes;
+  return query select p.id,p.dj_id,p.plan_type,p.proof_image,p.status,p.submitted_at,p.reviewed_at,p.reviewer_notes,case when p_status='approved' then raw_code else null end;
 end $func$;
 grant execute on function public.admin_review_subscription_proof(text,uuid,text,text) to anon,authenticated;

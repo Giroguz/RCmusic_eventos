@@ -71,11 +71,11 @@ export default function App() {
     if (!current?.[HISTORY_KEY]) return
     const trail = Array.isArray(current.routeTrail) && current.routeTrail.length ? current.routeTrail : readRouteStack()
     if (trail.length <= 1) return
-    const previousTrail = trail.slice(0, -1); const previous = previousTrail.at(-1)
-    if (!previous) return
-    writeRouteStack(previousTrail)
-    window.history.replaceState({ ...current, [HISTORY_KEY]: true, screen: previous.screen, activeEvent: previous.activeEvent || null, routeTrail: previousTrail, routeIndex: previousTrail.length - 1, appRoot: previousTrail.length === 1 }, '', routeHash(previous.screen))
-    setActiveEvent(previous.activeEvent || null); setScreen(previous.screen)
+    // Each app page is a real history entry created by navigate(). Move back
+    // exactly one browser entry so the previous page and its context are restored
+    // by syncRouteFromHistory(), instead of replacing the current entry and
+    // collapsing the route directly to the home screen.
+    window.history.back()
   }
 
   async function updateEvent(nextEvent) {

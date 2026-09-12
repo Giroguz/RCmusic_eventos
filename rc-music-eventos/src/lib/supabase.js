@@ -132,7 +132,7 @@ export async function createDjEvent(input, token = getStoredDjSession()?.token) 
 
 export async function updateDjEventInfo(eventId, input, token = getStoredDjSession()?.token) {
   if (!supabase || !token) throw new Error('DJ session required')
-  const { data, error } = await supabase.rpc('dj_update_event_info', { p_token: token, p_event_id: eventId, p_dj_name: input.djName, p_yape_number: input.yapeNumber, p_contact: input.contact })
+  const { data, error } = await supabase.rpc('dj_update_event_info', { p_token: token, p_event_id: eventId, p_dj_name: input.djName, p_yape_number: input.yapeNumber, p_contact: input.contact, p_thank_you: input.thankYou || '' })
   if (error) throw error
   return mapEvent(Array.isArray(data) ? data[0] : data, [])
 }
